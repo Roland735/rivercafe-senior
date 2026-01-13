@@ -14,10 +14,10 @@
     "bcrypt": "^6.0.0",
     "dotenv": "^17.2.1",
     "mongoose": "^8.18.0",
-    "next": "15.5.2",
+    "next": "15.5.9",
     "next-auth": "^4.24.11",
-    "react": "19.1.0",
-    "react-dom": "19.1.0",
+    "react": "19.1.2",
+    "react-dom": "19.1.2",
     "react-icons": "^5.5.0",
     "recharts": "^3.4.1",
     "xlsx": "^0.18.5"
@@ -26,7 +26,7 @@
     "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
     "eslint": "^9",
-    "eslint-config-next": "15.5.2",
+    "eslint-config-next": "15.5.9",
     "tailwindcss": "^4",
     "typescript": "^5.9.3"
   }
