@@ -27,6 +27,7 @@ function fmtNumber(n) {
 
 export default function AdminInventoryPage() {
   const { data: session, status } = useSession();
+  const role = String(session?.user?.role || "").toLowerCase();
   const [loading, setLoading] = useState(false);
   const [products, setProducts] = useState([]);
   const [inventories, setInventories] = useState([]);
@@ -94,10 +95,31 @@ export default function AdminInventoryPage() {
       <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
         <div className="max-w-md w-full bg-gradient-to-b from-slate-800 to-slate-900 border border-slate-700 rounded-xl p-8 text-center">
           <h2 className="text-xl font-semibold text-slate-100 mb-2">
-            Inventory (Admin)
+            Inventory
           </h2>
           <p className="text-sm text-slate-400 mb-6">
-            Sign in as admin to manage inventory.
+            Sign in to manage inventory.
+          </p>
+          <button
+            onClick={() => signIn()}
+            className="px-6 py-3 rounded-lg bg-cyan-600 text-white w-full"
+          >
+            Sign in
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (status === "authenticated" && !["admin", "inventory"].includes(role)) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-gradient-to-b from-slate-800 to-slate-900 border border-slate-700 rounded-xl p-8 text-center">
+          <h2 className="text-xl font-semibold text-slate-100 mb-2">
+            Not authorized
+          </h2>
+          <p className="text-sm text-slate-400 mb-6">
+            Your account cannot access inventory.
           </p>
           <button
             onClick={() => signIn()}

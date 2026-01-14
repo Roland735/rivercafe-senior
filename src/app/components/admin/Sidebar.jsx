@@ -16,11 +16,13 @@ import {
   FiMenu,
 } from "react-icons/fi";
 import { useState, useEffect } from "react";
-import { signOut } from "next-auth/react";
+import { signOut, useSession } from "next-auth/react";
 
 export default function Sidebar({ isCollapsed, toggleSidebar, onItemClick }) {
   const pathname = usePathname() || "/";
   const [isMobile, setIsMobile] = useState(false);
+  const { data: session } = useSession();
+  const role = String(session?.user?.role || "").toLowerCase();
 
   useEffect(() => {
     const checkMobile = () => {
@@ -60,6 +62,10 @@ export default function Sidebar({ isCollapsed, toggleSidebar, onItemClick }) {
       icon: <FiList />,
     },
   ];
+  const visibleItems =
+    role === "inventory"
+      ? items.filter((it) => it.href === "/admin/inventory")
+      : items;
 
   return (
     <>
@@ -113,7 +119,7 @@ export default function Sidebar({ isCollapsed, toggleSidebar, onItemClick }) {
         {/* Navigation items */}
         <nav className="mt-6 px-2">
           <ul className="space-y-1">
-            {items.map((it) => {
+            {visibleItems.map((it) => {
               const active =
                 pathname === it.href || pathname.startsWith(it.href + "/");
               return (

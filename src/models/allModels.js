@@ -57,7 +57,7 @@ const UserSchema = new mongoose.Schema({
     passwordHash: { type: String }, // optional if using NextAuth or SSO
     role: {
         type: String,
-        enum: ['student', 'admin', 'canteen', 'it', 'external'],
+        enum: ['student', 'admin', 'canteen', 'it', 'inventory', 'external'],
         default: 'student',
         index: true
     },

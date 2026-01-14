@@ -43,7 +43,8 @@ export async function GET(req) {
     try {
         await connectToDatabase();
         const session = await getSessionLike(req);
-        if (!session || !session.user || session.user.role !== "admin") {
+        const role = String(session?.user?.role || "").toLowerCase();
+        if (!session || !session.user || !["admin", "inventory"].includes(role)) {
             return NextResponse.json({ ok: false, error: "Not authorized" }, { status: 401 });
         }
 
@@ -124,7 +125,8 @@ export async function POST(req) {
     try {
         await connectToDatabase();
         const session = await getSessionLike(req);
-        if (!session || !session.user || session.user.role !== "admin") {
+        const role = String(session?.user?.role || "").toLowerCase();
+        if (!session || !session.user || !["admin", "inventory"].includes(role)) {
             return NextResponse.json({ ok: false, error: "Not authorized" }, { status: 401 });
         }
 
@@ -195,7 +197,8 @@ export async function PATCH(req) {
     try {
         await connectToDatabase();
         const session = await getSessionLike(req);
-        if (!session || !session.user || session.user.role !== "admin") {
+        const role = String(session?.user?.role || "").toLowerCase();
+        if (!session || !session.user || !["admin", "inventory"].includes(role)) {
             return NextResponse.json({ ok: false, error: "Not authorized" }, { status: 401 });
         }
 
@@ -237,7 +240,8 @@ export async function DELETE(req) {
     try {
         await connectToDatabase();
         const session = await getSessionLike(req);
-        if (!session || !session.user || session.user.role !== "admin") {
+        const role = String(session?.user?.role || "").toLowerCase();
+        if (!session || !session.user || !["admin", "inventory"].includes(role)) {
             return NextResponse.json({ ok: false, error: "Not authorized" }, { status: 401 });
         }
 

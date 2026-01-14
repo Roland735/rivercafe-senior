@@ -48,6 +48,7 @@ export default function LoginPage() {
     if (!role) return '/';
     const r = role.toString().toLowerCase();
     if (r === 'admin') return '/admin';
+    if (r === 'inventory') return '/admin/inventory';
     if (r === 'canteen') return '/canteen';
     if (r === 'student') return '/student';
     if (r === 'it') return '/it';

@@ -4,9 +4,17 @@
     dotenv.config({ path: '.env.local' });
 
     const verifyOnly = String(process.env.VERIFY || '').trim() === '1';
+    const verifyEmail = String(process.env.VERIFY_EMAIL || '').trim();
+    const verifyPassword = String(process.env.VERIFY_PASSWORD || '');
+    const resetEmail = String(process.env.RESET_EMAIL || '').trim();
+    const resetPassword = String(process.env.RESET_PASSWORD || '');
+    const createEmail = String(process.env.CREATE_EMAIL || '').trim();
+    const createPassword = String(process.env.CREATE_PASSWORD || '');
+    const createName = String(process.env.CREATE_NAME || '').trim();
 
     const confirm = String(process.env.CONFIRM || '').trim().toUpperCase();
-    if (!verifyOnly && confirm !== 'YES') {
+    const isVerifyMode = verifyOnly || (verifyEmail && verifyPassword);
+    if (!isVerifyMode && confirm !== 'YES') {
         console.error('Refusing to run. Set CONFIRM=YES to proceed.');
         process.exit(1);
     }
@@ -19,6 +27,18 @@
     await connectToDatabase();
 
     const saltRounds = 10;
+    if (verifyEmail && verifyPassword) {
+        const user = await User.findOne({ email: verifyEmail }).select({ email: 1, passwordHash: 1 }).lean();
+        if (!user) {
+            console.error(JSON.stringify({ ok: false, error: 'User not found', email: verifyEmail }));
+            process.exit(1);
+        }
+
+        const match = await bcrypt.compare(String(verifyPassword), String(user.passwordHash || ''));
+        console.log(JSON.stringify({ ok: true, email: verifyEmail, passwordMatches: match }));
+        process.exit(0);
+    }
+
     if (verifyOnly) {
         const sample = await User.findOne({
             role: 'student',
@@ -28,6 +48,65 @@
         const reg = sample?.regNumber ? String(sample.regNumber).trim() : '';
         const match = reg ? await bcrypt.compare(reg, String(sample?.passwordHash || '')) : false;
         console.log(JSON.stringify({ ok: true, sampleRegNumber: sample?.regNumber || null, passwordMatchesRegNumber: match }));
+        process.exit(0);
+    }
+
+    if (resetEmail && resetPassword) {
+        const user = await User.findOne({ email: resetEmail });
+        if (!user) {
+            console.error(JSON.stringify({ ok: false, error: 'User not found', email: resetEmail }));
+            process.exit(1);
+        }
+
+        user.passwordHash = await bcrypt.hash(String(resetPassword), saltRounds);
+        user.requirePasswordReset = false;
+        await user.save();
+
+        try {
+            await AuditLog.create({
+                actor: null,
+                action: 'reset_password_to_value',
+                collectionName: 'users',
+                documentId: user._id,
+                changes: { via: 'script', email: resetEmail }
+            });
+        } catch (e) {
+        }
+
+        console.log(JSON.stringify({ ok: true, email: resetEmail, id: String(user._id) }));
+        process.exit(0);
+    }
+
+    if (createEmail && createPassword) {
+        const existing = await User.findOne({ email: createEmail }).select({ _id: 1, email: 1, role: 1 }).lean();
+        if (existing) {
+            console.error(JSON.stringify({ ok: false, error: 'User already exists', email: createEmail, id: String(existing._id), role: existing.role || null }));
+            process.exit(1);
+        }
+
+        const passwordHash = await bcrypt.hash(String(createPassword), saltRounds);
+        const created = await User.create({
+            name: createName || createEmail,
+            email: createEmail,
+            role: 'inventory',
+            passwordHash,
+            isActive: true,
+            requirePasswordReset: false,
+            metadata: { createdBy: 'script' }
+        });
+
+        try {
+            await AuditLog.create({
+                actor: null,
+                action: 'create_inventory_user',
+                collectionName: 'users',
+                documentId: created._id,
+                changes: { email: createEmail, role: 'inventory' }
+            });
+        } catch (e) {
+        }
+
+        console.log(JSON.stringify({ ok: true, email: createEmail, id: String(created._id), role: created.role }));
         process.exit(0);
     }
 

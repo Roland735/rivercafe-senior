@@ -2,12 +2,18 @@
 'use client';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { usePathname, useRouter } from 'next/navigation';
 import Sidebar from '../components/admin/Sidebar';
 import AdminHeader from '../components/admin/AdminHeader';
+import { useSession } from 'next-auth/react';
 
 export default function ClientAdminLayout({ children }) {
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
     const [isMobile, setIsMobile] = useState(false);
+    const pathname = usePathname() || '/admin';
+    const router = useRouter();
+    const { data: session, status } = useSession();
+    const role = String(session?.user?.role || '').toLowerCase();
 
     useEffect(() => {
         const checkMobile = () => {
@@ -27,9 +33,42 @@ export default function ClientAdminLayout({ children }) {
         };
     }, []);
 
+    useEffect(() => {
+        if (status === 'loading') return;
+
+        if (status === 'unauthenticated') {
+            router.replace('/');
+            return;
+        }
+
+        if (role === 'inventory') {
+            const ok = pathname === '/admin/inventory' || pathname.startsWith('/admin/inventory/');
+            if (!ok) router.replace('/admin/inventory');
+            return;
+        }
+
+        if (role !== 'admin') {
+            router.replace('/');
+        }
+    }, [pathname, role, router, status]);
+
     const toggleSidebar = () => {
         setSidebarCollapsed(!sidebarCollapsed);
     };
+
+    const canRender =
+        status === 'authenticated' &&
+        (role === 'admin' ||
+            (role === 'inventory' &&
+                (pathname === '/admin/inventory' || pathname.startsWith('/admin/inventory/'))));
+
+    if (!canRender) {
+        return (
+            <div className="min-h-screen bg-slate-900 text-slate-100 flex items-center justify-center">
+                <div className="text-slate-300">Loading...</div>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen bg-slate-900 text-slate-100 flex">
