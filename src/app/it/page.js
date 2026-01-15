@@ -38,7 +38,7 @@ function Modal({ open, title, onClose, children, footer }) {
                 onClick={onClose}
                 aria-hidden
             />
-            <div className="relative w-full max-w-2xl bg-slate-800 border border-slate-700 rounded-xl p-5 z-10 mx-4">
+            <div className="relative w-full max-w-2xl bg-slate-800 border border-slate-700 rounded-xl p-5 z-10 mx-4 max-h-[90vh] overflow-y-auto">
                 <div className="flex items-center justify-between mb-3">
                     <h3 className="text-lg font-semibold text-slate-100">{title}</h3>
                     <button

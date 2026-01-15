@@ -35,7 +35,43 @@ function emptyProduct() {
     };
 }
 
+function normalizeProductForm(p) {
+    const base = emptyProduct();
+    const merged = { ...base, ...(p || {}) };
+    return {
+        ...merged,
+        name: merged.name ?? '',
+        sku: merged.sku ?? '',
+        category: merged.category ?? '',
+        price: Number(merged.price || 0),
+        available: typeof merged.available === 'boolean' ? merged.available : true,
+        prepTimeMinutes: Number(merged.prepTimeMinutes || 0) || 5,
+        imageUrl: merged.imageUrl ?? '',
+        tags: Array.isArray(merged.tags) ? merged.tags : [],
+        allergens: Array.isArray(merged.allergens) ? merged.allergens : [],
+        notes: merged.notes ?? ''
+    };
+}
+
+function buildProductPayload(form) {
+    const f = normalizeProductForm(form);
+    const sku = String(f.sku || '').trim();
+    return {
+        name: String(f.name || '').trim(),
+        sku: sku ? sku : null,
+        category: String(f.category || '').trim(),
+        price: Number(f.price || 0),
+        available: !!f.available,
+        prepTimeMinutes: Number(f.prepTimeMinutes || 0) || 5,
+        imageUrl: String(f.imageUrl || '').trim(),
+        tags: Array.isArray(f.tags) ? f.tags : [],
+        allergens: Array.isArray(f.allergens) ? f.allergens : [],
+        notes: String(f.notes || '')
+    };
+}
+
 export default function AdminMenuPage() {
+    const [menuType, setMenuType] = useState('ordinary');
     const [products, setProducts] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
@@ -48,20 +84,18 @@ export default function AdminMenuPage() {
     const [categories, setCategories] = useState([]);
     const [selectedCategory, setSelectedCategory] = useState('all');
     const [availabilityFilter, setAvailabilityFilter] = useState('all');
+    const [allCategories, setAllCategories] = useState([]);
+    const apiBase = menuType === 'special' ? '/api/admin/special-products' : '/api/admin/products';
 
     async function loadList() {
         setLoading(true);
         setError(null);
         try {
             const q = search ? `?search=${encodeURIComponent(search)}` : '';
-            const res = await fetch(`/api/admin/products${q}`, { cache: 'no-store' });
+            const res = await fetch(`${apiBase}${q}`, { cache: 'no-store' });
             const body = await res.json();
             if (!body.ok) throw new Error(body.error || 'Failed to load');
             setProducts(body.products || []);
-
-            // Extract unique categories
-            const uniqueCategories = [...new Set(body.products.map(p => p.category).filter(Boolean))];
-            setCategories(uniqueCategories);
         } catch (err) {
             console.error(err);
             setError(err.message || 'Failed to load');
@@ -70,7 +104,29 @@ export default function AdminMenuPage() {
         }
     }
 
-    useEffect(() => { loadList(); }, [search]);
+    async function loadCategories() {
+        try {
+            const [ordRes, spRes] = await Promise.all([
+                fetch('/api/admin/products', { cache: 'no-store' }),
+                fetch('/api/admin/special-products', { cache: 'no-store' })
+            ]);
+
+            const [ordBody, spBody] = await Promise.all([ordRes.json(), spRes.json()]);
+            const ordCats = ordBody?.ok ? (ordBody.products || []).map(p => p.category).filter(Boolean) : [];
+            const spCats = spBody?.ok ? (spBody.products || []).map(p => p.category).filter(Boolean) : [];
+
+            const unique = [...new Set([...ordCats, ...spCats])];
+            setAllCategories(unique);
+        } catch (e) {
+        }
+    }
+
+    useEffect(() => { loadList(); }, [search, menuType]);
+    useEffect(() => { loadCategories(); }, []);
+    useEffect(() => {
+        const uniqueCategories = [...new Set((products || []).map(p => p.category).filter(Boolean))];
+        setCategories(uniqueCategories);
+    }, [products]);
 
     function openCreate() {
         setForm(emptyProduct());
@@ -79,7 +135,7 @@ export default function AdminMenuPage() {
     }
 
     function openEdit(p) {
-        setForm({ ...p, price: Number(p.price || 0) });
+        setForm(normalizeProductForm(p));
         setEditing(p);
         setCreating(false);
     }
@@ -91,10 +147,11 @@ export default function AdminMenuPage() {
     async function saveCreate() {
         setLoading(true);
         try {
-            const res = await fetch('/api/admin/products', {
+            const payload = buildProductPayload(form);
+            const res = await fetch(apiBase, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(form)
+                body: JSON.stringify(payload)
             });
             const body = await res.json();
             if (!body.ok) throw new Error(body.error || 'Create failed');
@@ -111,10 +168,11 @@ export default function AdminMenuPage() {
         if (!editing) return;
         setLoading(true);
         try {
-            const res = await fetch(`/api/admin/products/${editing._id}`, {
+            const payload = buildProductPayload(form);
+            const res = await fetch(`${apiBase}/${editing._id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(form)
+                body: JSON.stringify(payload)
             });
             const body = await res.json();
             if (!body.ok) throw new Error(body.error || 'Update failed');
@@ -131,7 +189,7 @@ export default function AdminMenuPage() {
         if (!confirm(`Delete "${p.name}"?`)) return;
         setLoading(true);
         try {
-            const res = await fetch(`/api/admin/products/${p._id}`, { method: 'DELETE' });
+            const res = await fetch(`${apiBase}/${p._id}`, { method: 'DELETE' });
             const body = await res.json();
             if (!body.ok) throw new Error(body.error || 'Delete failed');
             await loadList();
@@ -175,6 +233,8 @@ export default function AdminMenuPage() {
         return categoryMatch && availabilityMatch;
     });
 
+    const categoryOptions = [...new Set([...(allCategories || []), form.category].filter(Boolean))];
+
     return (
         <div className="space-y-6">
             {/* Header Section */}
@@ -184,6 +244,26 @@ export default function AdminMenuPage() {
                     <p className="text-sm text-slate-300 mt-1">Create and manage canteen menu items</p>
                 </div>
                 <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full lg:w-auto">
+                    <div className="flex items-center gap-2 w-full sm:w-auto">
+                        <button
+                            onClick={() => setMenuType('ordinary')}
+                            className={`px-4 py-2 rounded-lg border transition-colors duration-200 w-full sm:w-auto ${menuType === 'ordinary'
+                                ? 'bg-red-600 border-red-500 text-white'
+                                : 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700/50'
+                                }`}
+                        >
+                            Ordinary
+                        </button>
+                        <button
+                            onClick={() => setMenuType('special')}
+                            className={`px-4 py-2 rounded-lg border transition-colors duration-200 w-full sm:w-auto ${menuType === 'special'
+                                ? 'bg-red-600 border-red-500 text-white'
+                                : 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700/50'
+                                }`}
+                        >
+                            Special
+                        </button>
+                    </div>
                     <div className="relative w-full sm:w-64">
                         <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" size={18} />
                         <input
@@ -399,7 +479,9 @@ export default function AdminMenuPage() {
                     <div className="bg-slate-800 border border-slate-700 rounded-xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
                         <div className="flex items-center justify-between mb-6">
                             <h4 className="font-semibold text-slate-100 text-lg">
-                                {creating ? 'Create New Product' : `Edit: ${editing?.name}`}
+                                {creating
+                                    ? `Create New ${menuType === 'special' ? 'Special ' : ''}Product`
+                                    : `Edit: ${editing?.name}`}
                             </h4>
                             <button
                                 onClick={() => { setCreating(false); setEditing(null); setForm(emptyProduct()); }}
@@ -423,7 +505,7 @@ export default function AdminMenuPage() {
                             <div className="space-y-2">
                                 <label className="text-sm text-slate-300">SKU</label>
                                 <input
-                                    value={form.sku}
+                                    value={form.sku || ''}
                                     onChange={e => setField('sku', e.target.value)}
                                     placeholder="Product code"
                                     className="w-full p-3 bg-slate-900 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:ring-2 focus:ring-red-500"
@@ -431,13 +513,21 @@ export default function AdminMenuPage() {
                             </div>
 
                             <div className="space-y-2">
-                                <label className="text-sm text-slate-300">Category</label>
-                                <input
+                                <label className="text-sm text-slate-300">
+                                    Category{menuType === 'special' ? ' *' : ''}
+                                </label>
+                                <select
                                     value={form.category}
                                     onChange={e => setField('category', e.target.value)}
-                                    placeholder="e.g., Main Course"
                                     className="w-full p-3 bg-slate-900 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:ring-2 focus:ring-red-500"
-                                />
+                                >
+                                    <option value="">
+                                        {menuType === 'special' ? 'Select category (required)' : 'Select category'}
+                                    </option>
+                                    {categoryOptions.map((cat) => (
+                                        <option key={cat} value={cat}>{cat}</option>
+                                    ))}
+                                </select>
                             </div>
 
                             <div className="space-y-2">

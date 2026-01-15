@@ -376,14 +376,83 @@ ProductSchema.methods.isAvailableAt = async function (date = new Date()) {
     }
 };
 
+const SpecialProductSchema = new mongoose.Schema({
+    name: { type: String, required: true, index: true },
+    sku: { type: String, sparse: true, index: true },
+    category: { type: String, index: true, required: true },
+    price: { type: Number, required: true },
+    available: { type: Boolean, default: true, index: true },
+    availablePeriods: [AvailabilityPeriodSchema],
+    prepTimeMinutes: { type: Number, default: 5 },
+    prepStation: { type: mongoose.Schema.Types.ObjectId, ref: 'PrepStation' },
+    imageUrl: String,
+    tags: [String],
+    allergens: [String],
+    notes: String,
+    metadata: mongoose.Schema.Types.Mixed
+}, { timestamps: true });
+
+SpecialProductSchema.index({ name: 1, category: 1 });
+
+const SpecialOrderingWindowSchema = new mongoose.Schema({
+    category: { type: String, required: true, index: true },
+    name: { type: String, required: true },
+    daysOfWeek: [{ type: Number, min: 0, max: 6 }],
+    startTime: { type: String, required: true },
+    endTime: { type: String, required: true },
+    active: { type: Boolean, default: true },
+    priority: { type: Number, default: 0 },
+    timezone: { type: String, default: 'Africa/Harare' },
+    description: String
+}, { timestamps: true });
+
+SpecialOrderingWindowSchema.index({ category: 1, priority: -1, startTime: 1 });
+
+const SpecialOrderItemSchema = new mongoose.Schema({
+    product: { type: mongoose.Schema.Types.ObjectId, ref: 'SpecialProduct' },
+    name: String,
+    price: Number,
+    qty: { type: Number, default: 1 },
+    notes: String,
+    allergens: [String],
+    preparedCount: { type: Number, default: 0 },
+}, { _id: false });
+
+const SpecialOrderSchema = new mongoose.Schema({
+    code: { type: String, index: true },
+    user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    regNumber: { type: String, sparse: true, index: true },
+    category: { type: String, index: true },
+    items: [SpecialOrderItemSchema],
+    total: { type: Number, required: true },
+    status: { type: String, enum: ['placed', 'preparing', 'ready', 'collected', 'cancelled', 'refunded'], default: 'placed', index: true },
+    orderingWindow: { type: mongoose.Schema.Types.ObjectId, ref: 'SpecialOrderingWindow' },
+    prepStation: { type: mongoose.Schema.Types.ObjectId, ref: 'PrepStation' },
+    prepBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    collectedByRegNumber: String,
+    expiresAt: Date,
+    remarks: String,
+    meta: mongoose.Schema.Types.Mixed
+}, { timestamps: true });
+
+SpecialOrderSchema.index({ createdAt: -1, status: 1, category: 1 });
+
+SpecialOrderSchema.statics.generateCode = function (prefix = 'SP-') {
+    const tail = generateAlphanumericCode('', 4);
+    return `${prefix}${tail}`;
+};
+
 /* ---------------------------
    Model exports (single-file)
    --------------------------- */
 export const User = mongoose.models.User || mongoose.model('User', UserSchema);
 export const Product = mongoose.models.Product || mongoose.model('Product', ProductSchema);
+export const SpecialProduct = mongoose.models.SpecialProduct || mongoose.model('SpecialProduct', SpecialProductSchema);
 export const PrepStation = mongoose.models.PrepStation || mongoose.model('PrepStation', PrepStationSchema);
 export const OrderingWindow = mongoose.models.OrderingWindow || mongoose.model('OrderingWindow', OrderingWindowSchema);
+export const SpecialOrderingWindow = mongoose.models.SpecialOrderingWindow || mongoose.model('SpecialOrderingWindow', SpecialOrderingWindowSchema);
 export const Order = mongoose.models.Order || mongoose.model('Order', OrderSchema);
+export const SpecialOrder = mongoose.models.SpecialOrder || mongoose.model('SpecialOrder', SpecialOrderSchema);
 export const Transaction = mongoose.models.Transaction || mongoose.model('Transaction', TransactionSchema);
 export const ExternalCode = mongoose.models.ExternalCode || mongoose.model('ExternalCode', ExternalCodeSchema);
 export const AuditLog = mongoose.models.AuditLog || mongoose.model('AuditLog', AuditLogSchema);
@@ -968,9 +1037,12 @@ const Models = {
     connectToDatabase,
     User,
     Product,
+    SpecialProduct,
     PrepStation,
     OrderingWindow,
+    SpecialOrderingWindow,
     Order,
+    SpecialOrder,
     Transaction,
     ExternalCode,
     AuditLog,

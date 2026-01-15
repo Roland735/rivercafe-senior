@@ -313,7 +313,7 @@ export default function AdminAccountingPage() {
             onClick={closeOrderModal}
             aria-hidden
           />
-          <div className="relative max-w-3xl w-full bg-slate-800 border border-slate-700 rounded-xl p-6 z-10 text-slate-100 shadow-lg">
+          <div className="relative max-w-3xl w-full bg-slate-800 border border-slate-700 rounded-xl p-6 z-10 text-slate-100 shadow-lg max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-start">
               <h2 className="text-lg font-semibold">Order details</h2>
               <button
