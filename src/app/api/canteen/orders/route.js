@@ -1,6 +1,6 @@
 // app/api/canteen/orders/route.js
 import { NextResponse } from 'next/server';
-import { connectToDatabase, Order } from '@/models/allModels.js';
+import { connectToDatabase, Order, SpecialOrder } from '@/models/allModels.js';
 import { getServerSession } from 'next-auth/next';
 import { getToken } from 'next-auth/jwt';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
@@ -77,12 +77,16 @@ export async function GET(req) {
 
         // If status provided, return flat list filtered by that status
         if (statusFilter) {
-            const orders = await Order.find({ ...baseQuery, status: statusFilter })
+            const ordersStd = await Order.find({ ...baseQuery, status: statusFilter })
+                .sort({ createdAt: 1 })
+                .limit(limit)
+                .lean();
+            const ordersSpec = await SpecialOrder.find({ ...baseQuery, status: statusFilter })
                 .sort({ createdAt: 1 })
                 .limit(limit)
                 .lean();
 
-            const normalized = orders.map(o => ({
+            const normalize = (o) => ({
                 id: o._id?.toString ? o._id.toString() : o._id,
                 code: o.code,
                 status: o.status,
@@ -93,15 +97,21 @@ export async function GET(req) {
                 orderingWindow: o.orderingWindow || null,
                 prepStation: o.prepStation || null,
                 meta: o.meta || {},
-            }));
+            });
+            const normalized = [...ordersStd.map(normalize), ...ordersSpec.map(normalize)].sort(
+                (a, b) => new Date(a.createdAt) - new Date(b.createdAt)
+            );
 
             return NextResponse.json({ ok: true, orders: normalized }, { status: 200 });
         }
 
         // otherwise return grouped summary for canteen dashboard
-        const placed = await Order.find({ ...baseQuery, status: 'placed' }).sort({ createdAt: 1 }).limit(limit).lean();
-        const preparing = await Order.find({ ...baseQuery, status: 'preparing' }).sort({ createdAt: 1 }).limit(limit).lean();
-        const ready = await Order.find({ ...baseQuery, status: 'ready' }).sort({ createdAt: 1 }).limit(limit).lean();
+        const placedStd = await Order.find({ ...baseQuery, status: 'placed' }).sort({ createdAt: 1 }).limit(limit).lean();
+        const preparingStd = await Order.find({ ...baseQuery, status: 'preparing' }).sort({ createdAt: 1 }).limit(limit).lean();
+        const readyStd = await Order.find({ ...baseQuery, status: 'ready' }).sort({ createdAt: 1 }).limit(limit).lean();
+        const placedSpec = await SpecialOrder.find({ ...baseQuery, status: 'placed' }).sort({ createdAt: 1 }).limit(limit).lean();
+        const preparingSpec = await SpecialOrder.find({ ...baseQuery, status: 'preparing' }).sort({ createdAt: 1 }).limit(limit).lean();
+        const readySpec = await SpecialOrder.find({ ...baseQuery, status: 'ready' }).sort({ createdAt: 1 }).limit(limit).lean();
 
         const map = (arr) => arr.map(o => ({
             id: o._id?.toString ? o._id.toString() : o._id,
@@ -119,14 +129,14 @@ export async function GET(req) {
         return NextResponse.json({
             ok: true,
             groups: {
-                placed: map(placed),
-                preparing: map(preparing),
-                ready: map(ready)
+                placed: [...map(placedStd), ...map(placedSpec)].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)),
+                preparing: [...map(preparingStd), ...map(preparingSpec)].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)),
+                ready: [...map(readyStd), ...map(readySpec)].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
             },
             counts: {
-                placed: placed.length,
-                preparing: preparing.length,
-                ready: ready.length
+                placed: (placedStd.length + placedSpec.length),
+                preparing: (preparingStd.length + preparingSpec.length),
+                ready: (readyStd.length + readySpec.length)
             }
         }, { status: 200 });
     } catch (err) {

@@ -2,7 +2,7 @@
 export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
-import { connectToDatabase, Order, ExternalCode, AuditLog, User } from "@/models/allModels.js";
+import { connectToDatabase, Order, SpecialOrder, ExternalCode, AuditLog, User } from "@/models/allModels.js";
 import { getToken } from "next-auth/jwt";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 
@@ -52,15 +52,21 @@ export async function GET(req) {
 
         // Single-order lookup by code (existing)
         if (code) {
-            const order = await Order.findOne({ code }).populate({ path: "user", select: "name regNumber" }).lean();
-            if (!order) return NextResponse.json({ ok: false, error: "Order not found" }, { status: 404 });
+            let order = await Order.findOne({ code }).populate({ path: "user", select: "name regNumber" }).lean();
+            let isSpecial = false;
+            if (!order) {
+                const sp = await SpecialOrder.findOne({ code }).populate({ path: "user", select: "name regNumber" }).lean();
+                if (!sp) return NextResponse.json({ ok: false, error: "Order not found" }, { status: 404 });
+                order = sp;
+                isSpecial = true;
+            }
 
             if (order.expiresAt && new Date() > new Date(order.expiresAt)) {
                 return NextResponse.json({ ok: false, error: "Order pickup code expired" }, { status: 410 });
             }
 
             let issuedToName = order.meta?.issuedToName || null;
-            if (order.external) {
+            if (!isSpecial && order.external) {
                 try {
                     const ext = await ExternalCode.findOne({ $or: [{ order: order._id }, { code: order.code }] }).lean();
                     if (ext && ext.issuedToName) issuedToName = ext.issuedToName;
@@ -74,7 +80,7 @@ export async function GET(req) {
                 const u = await User.findOne({ regNumber: order.regNumber }).select("name").lean();
                 if (u && u.name) studentName = u.name;
             }
-            studentName = studentName || (order.external ? issuedToName : null);
+            studentName = studentName || (!isSpecial && order.external ? issuedToName : null);
 
             const safe = {
                 id: order._id?.toString ? order._id.toString() : order._id,
@@ -83,7 +89,7 @@ export async function GET(req) {
                 items: order.items || [],
                 total: order.total,
                 regNumber: order.regNumber || null,
-                external: !!order.external,
+                external: isSpecial ? false : !!order.external,
                 issuedToName,
                 studentName,
                 expiresAt: order.expiresAt || null,
@@ -135,10 +141,26 @@ export async function GET(req) {
             .populate({ path: "user", select: "name regNumber" })
             .select("code status items total regNumber external meta expiresAt createdAt collectedAt user")
             .lean();
+        const baseSpecial = { status: { $in: allowedStatuses } };
+        if (dateParam) baseSpecial.createdAt = { $gte: dayStart, $lte: dayEnd };
+        if (q) {
+            const orSpec = [];
+            if (userIdsForQ?.length) orSpec.push({ user: { $in: userIdsForQ } });
+            if (regNumbersForQ?.length) orSpec.push({ regNumber: { $in: regNumbersForQ } });
+            if (orSpec.length) baseSpecial.$or = orSpec;
+        }
+        const specials = await SpecialOrder.find(baseSpecial)
+            .sort({ createdAt: 1 })
+            .populate({ path: "user", select: "name regNumber" })
+            .select("code status items total regNumber meta expiresAt createdAt collectedAt user")
+            .lean();
 
         // gather regNumbers that have no populated user so we can map names in one query
         const missingRegNums = new Set();
         for (const ord of orders) {
+            if (!ord.user && ord.regNumber) missingRegNums.add(ord.regNumber);
+        }
+        for (const ord of specials) {
             if (!ord.user && ord.regNumber) missingRegNums.add(ord.regNumber);
         }
         const missingRegArray = Array.from(missingRegNums);
@@ -184,7 +206,28 @@ export async function GET(req) {
                 collectedAt: ord.collectedAt || null
             });
         }
+        for (const ord of specials) {
+            if (ord.expiresAt && new Date() > new Date(ord.expiresAt)) continue;
+            let studentName = null;
+            if (ord.user && ord.user.name) studentName = ord.user.name;
+            else if (ord.regNumber && regNumberNameMap[ord.regNumber]) studentName = regNumberNameMap[ord.regNumber];
+            safeList.push({
+                id: ord._id?.toString ? ord._id.toString() : ord._id,
+                code: ord.code,
+                status: ord.status,
+                items: ord.items || [],
+                total: ord.total,
+                regNumber: ord.regNumber || null,
+                external: false,
+                issuedToName: null,
+                studentName,
+                expiresAt: ord.expiresAt || null,
+                createdAt: ord.createdAt,
+                collectedAt: ord.collectedAt || null
+            });
+        }
 
+        safeList.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
         return NextResponse.json({ ok: true, date: dateParam || null, q: q || null, count: safeList.length, orders: safeList }, { status: 200 });
     } catch (err) {
         console.error("GET /api/canteen/process error", err);
@@ -210,15 +253,25 @@ export async function POST(req) {
         const body = await req.json().catch(() => ({}));
         const { orderId, code, regNumber } = body || {};
 
-        // prefer orderId path
         let order = null;
+        let isSpecial = false;
         if (orderId) {
             order = await Order.findById(orderId);
-            if (!order) return NextResponse.json({ ok: false, error: "Order not found" }, { status: 404 });
+            if (!order) {
+                const sp = await SpecialOrder.findById(orderId);
+                if (!sp) return NextResponse.json({ ok: false, error: "Order not found" }, { status: 404 });
+                order = sp;
+                isSpecial = true;
+            }
         } else {
             if (!code) return NextResponse.json({ ok: false, error: "Missing order code" }, { status: 400 });
             order = await Order.findOne({ code });
-            if (!order) return NextResponse.json({ ok: false, error: "Order not found" }, { status: 404 });
+            if (!order) {
+                const sp = await SpecialOrder.findOne({ code });
+                if (!sp) return NextResponse.json({ ok: false, error: "Order not found" }, { status: 404 });
+                order = sp;
+                isSpecial = true;
+            }
         }
 
         // expiry
@@ -241,7 +294,7 @@ export async function POST(req) {
 
         // If external, mark ExternalCode used if present
         let issuedToName = null;
-        if (order.external) {
+        if (!isSpecial && order.external) {
             try {
                 const ext = await ExternalCode.findOne({ $or: [{ order: order._id }, { code: order.code }] });
                 if (ext) {
@@ -267,7 +320,7 @@ export async function POST(req) {
             await AuditLog.create({
                 actor: actorId,
                 action: "collect_order",
-                collectionName: "orders",
+                collectionName: isSpecial ? "specialorders" : "orders",
                 documentId: order._id,
                 changes: { status: "collected", collectedByRegNumber: regNumber || null },
                 meta: { fromIp: req.headers.get("x-forwarded-for") || null },

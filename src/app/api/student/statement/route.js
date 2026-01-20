@@ -1,6 +1,6 @@
 // app/api/student/statement/route.js
 import { NextResponse } from 'next/server';
-import { connectToDatabase, Transaction, User, Order } from '@/models/allModels.js';
+import { connectToDatabase, Transaction, User, Order, SpecialOrder } from '@/models/allModels.js';
 import { getServerSession } from 'next-auth/next';
 import { getToken } from 'next-auth/jwt';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
@@ -103,17 +103,31 @@ export async function GET(req) {
             .populate({ path: 'relatedOrder', select: 'code status total' })
             .lean();
 
+        const specialIds = txs.map(t => t?.meta?.specialOrderId).filter(Boolean);
+        let specialMap = {};
+        if (specialIds.length) {
+            const specials = await SpecialOrder.find({ _id: { $in: specialIds } }).select('code status total').lean();
+            specialMap = Object.fromEntries(specials.map(s => [String(s._id), s]));
+        }
+
         // compute running balances optionally and normalize
-        const txsOut = txs.map(t => ({
-            id: t._id?.toString ? t._id.toString() : t._id,
-            type: t.type,
-            amount: t.amount,
-            balanceBefore: t.balanceBefore,
-            balanceAfter: t.balanceAfter,
-            relatedOrder: t.relatedOrder ? { id: t.relatedOrder._id?.toString ? t.relatedOrder._id.toString() : t.relatedOrder._id, code: t.relatedOrder.code, status: t.relatedOrder.status, total: t.relatedOrder.total } : null,
-            note: t.note || '',
-            createdAt: t.createdAt
-        }));
+        const txsOut = txs.map(t => {
+            const rel = t.relatedOrder
+                ? { id: t.relatedOrder._id?.toString ? t.relatedOrder._id.toString() : t.relatedOrder._id, code: t.relatedOrder.code, status: t.relatedOrder.status, total: t.relatedOrder.total }
+                : (t?.meta?.specialOrderId && specialMap[String(t.meta.specialOrderId)]
+                    ? { id: String(t.meta.specialOrderId), code: specialMap[String(t.meta.specialOrderId)].code, status: specialMap[String(t.meta.specialOrderId)].status, total: specialMap[String(t.meta.specialOrderId)].total }
+                    : null);
+            return {
+                id: t._id?.toString ? t._id.toString() : t._id,
+                type: t.type,
+                amount: t.amount,
+                balanceBefore: t.balanceBefore,
+                balanceAfter: t.balanceAfter,
+                relatedOrder: rel,
+                note: t.note || '',
+                createdAt: t.createdAt
+            };
+        });
 
         // Optionally return a small summary: current balance (from last transaction) and totals
         const currentBalance = txsOut.length ? txsOut[0].balanceAfter : null;

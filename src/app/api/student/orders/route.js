@@ -1,6 +1,6 @@
 // app/api/student/orders/route.js
 import { NextResponse } from 'next/server';
-import { connectToDatabase, Order } from '@/models/allModels.js';
+import { connectToDatabase, Order, SpecialOrder } from '@/models/allModels.js';
 import { getServerSession } from 'next-auth/next';
 import { getToken } from 'next-auth/jwt';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
@@ -78,13 +78,37 @@ export async function GET(req) {
         const isObjectId = /^[0-9a-fA-F]{24}$/.test(String(userIdOrReg));
         const query = isObjectId ? { user: userIdOrReg } : { regNumber: userIdOrReg };
 
-        const orders = await Order.find(query)
+        const ordersStd = await Order.find(query)
             .select('code status total items createdAt orderingWindow prepStation external')
             .sort({ createdAt: -1 })
             .limit(limit)
             .lean();
+        const ordersSpec = await SpecialOrder.find(query)
+            .select('code status total items createdAt orderingWindow prepStation')
+            .sort({ createdAt: -1 })
+            .limit(limit)
+            .lean();
 
-        return NextResponse.json({ ok: true, orders }, { status: 200 });
+        const normalize = (o, isSpec = false) => ({
+            id: o._id?.toString ? o._id.toString() : o._id,
+            code: o.code,
+            status: o.status,
+            total: o.total,
+            items: (o.items || []).map(it => ({
+                name: it.name,
+                price: it.price,
+                qty: it.qty
+            })),
+            createdAt: o.createdAt,
+            orderingWindow: o.orderingWindow || null,
+            prepStation: o.prepStation || null,
+            external: isSpec ? false : !!o.external
+        });
+        const merged = [...ordersStd.map(o => normalize(o, false)), ...ordersSpec.map(o => normalize(o, true))]
+            .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+            .slice(0, limit);
+
+        return NextResponse.json({ ok: true, orders: merged }, { status: 200 });
     } catch (err) {
         console.error('GET /api/student/orders error', err);
         return NextResponse.json({ ok: false, error: err.message || 'Server error' }, { status: 500 });
