@@ -1,7 +1,7 @@
 // app/api/admin/reports/sales/route.js
 export const runtime = "nodejs";
 
-import { connectToDatabase, Order, Product, Inventory } from "@/models/allModels.js";
+import { connectToDatabase, Order, Product, Inventory, SpecialOrder, SpecialProduct } from "@/models/allModels.js";
 
 /**
  * GET /api/admin/reports/sales
@@ -83,14 +83,26 @@ export async function GET(req) {
         })
             .select("createdAt updatedAt status total items")
             .lean();
+        const specialOrders = await SpecialOrder.find({
+            createdAt: createdAtFilter,
+            status: { $ne: "cancelled" },
+        })
+            .select("createdAt updatedAt status total items category")
+            .lean();
+        const allOrders = orders.concat(specialOrders);
 
         // load products (for mapping name -> category/price)
         const products = await Product.find().select("name category price sku").lean();
+        const specialProducts = await SpecialProduct.find().select("name category price sku").lean();
         const productById = new Map();
         const productByName = new Map();
         for (const p of products) {
             if (p && p._id) productById.set(String(p._id), p);
             if (p && p.name) productByName.set(String(p.name).toLowerCase(), p);
+        }
+        for (const sp of specialProducts) {
+            if (sp && sp._id) productById.set(String(sp._id), sp);
+            if (sp && sp.name) productByName.set(String(sp.name).toLowerCase(), sp);
         }
 
         function getCollectedAt(order) {
@@ -127,7 +139,7 @@ export async function GET(req) {
         }
 
         if (period === "weekly") {
-            for (const ord of orders) {
+            for (const ord of allOrders) {
                 const day = new Date(ord.createdAt);
                 const wkStart = startOfWeek(day);
                 const wkEnd = endOfWeek(day);
@@ -159,7 +171,7 @@ export async function GET(req) {
             }
         } else {
             // daily
-            for (const ord of orders) {
+            for (const ord of allOrders) {
                 const day = startOfDay(new Date(ord.createdAt));
                 const key = formatDateYYYYMMDD(day);
                 if (!groupsMap.has(key)) {

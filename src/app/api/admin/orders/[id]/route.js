@@ -1,6 +1,6 @@
 // app/api/admin/orders/[id]/route.js
 import { NextResponse } from "next/server";
-import { connectToDatabase, Order } from "@/models/allModels";
+import { connectToDatabase, Order, SpecialOrder } from "@/models/allModels";
 import mongoose from "mongoose";
 
 /**
@@ -16,13 +16,34 @@ export async function GET(req, { params }) {
             return NextResponse.json({ ok: false, error: "Invalid order id" }, { status: 400 });
         }
 
-        const order = await Order.findById(id)
+        let order = await Order.findById(id)
             .populate("user", "name regNumber")
             .populate("prepStation", "name")
             .lean();
 
         if (!order) {
-            return NextResponse.json({ ok: false, error: "Order not found" }, { status: 404 });
+            const sOrder = await SpecialOrder.findById(id)
+                .populate("user", "name regNumber")
+                .populate("prepStation", "name")
+                .lean();
+            if (!sOrder) {
+                return NextResponse.json({ ok: false, error: "Order not found" }, { status: 404 });
+            }
+            order = {
+                _id: sOrder._id,
+                code: sOrder.code,
+                status: sOrder.status,
+                items: sOrder.items || [],
+                total: sOrder.total,
+                createdAt: sOrder.createdAt,
+                updatedAt: sOrder.updatedAt,
+                user: sOrder.user ? { id: sOrder.user._id, name: sOrder.user.name, regNumber: sOrder.user.regNumber } : null,
+                regNumber: sOrder.regNumber || (sOrder.user ? sOrder.user.regNumber : null),
+                prepStation: sOrder.prepStation ? { id: sOrder.prepStation._id, name: sOrder.prepStation.name } : null,
+                prepBy: sOrder.prepBy || null,
+                meta: sOrder.meta || {},
+            };
+            return NextResponse.json({ ok: true, order });
         }
 
         // safety: normalize fields we use client-side
