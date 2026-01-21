@@ -48,13 +48,14 @@ export default function Sidebar({ isCollapsed, toggleSidebar, onItemClick }) {
     { href: "/admin/accounting", label: "Accounting", icon: <FiBarChart /> },
     { href: "/admin/reports/sales", label: "Sales", icon: <FiBarChart /> },
     { href: "/admin/inventory", label: "Inventory", icon: <FiBarChart /> },
-    { href: "/admin/users", label: "Users", icon: <FiUsers /> },
-    { href: "/admin/refund", label: "Refund", icon: <FiUsers /> },
     {
       href: "/admin/external-order",
       label: "External Order",
       icon: <FiUsers />,
     },
+    { href: "/admin/refund", label: "Refund", icon: <FiUsers /> },
+    { href: "/admin/users", label: "Users", icon: <FiUsers /> },
+
     { href: "/admin/settings", label: "Settings", icon: <FiSettings /> },
     {
       href: "/admin/reset-password",
