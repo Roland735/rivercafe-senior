@@ -54,6 +54,7 @@ export default function Sidebar({ isCollapsed, toggleSidebar, onItemClick }) {
       icon: <FiUsers />,
     },
     { href: "/admin/refund", label: "Refund", icon: <FiUsers /> },
+    { href: "/admin/students", label: "Students", icon: <FiUsers /> },
     { href: "/admin/users", label: "Users", icon: <FiUsers /> },
 
     { href: "/admin/settings", label: "Settings", icon: <FiSettings /> },

@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 // adjust this path if your NextAuth route file is elsewhere
 import { authOptions } from "../../auth/[...nextauth]/route";
-import { connectToDatabase, ExternalCode } from "../../../../models/allModels.js";
+import { connectToDatabase, ExternalCode, SpecialOrder } from "../../../../models/allModels.js";
 
 export async function GET(req) {
     try {
@@ -35,6 +35,32 @@ export async function GET(req) {
             .populate("issuedBy", "name regNumber")
             .populate("order", "code total items status createdAt") // 👈 include code here
             .lean();
+
+        // --- Handle Special Orders ---
+        // Collect special order IDs from meta
+        const specialOrderIds = [];
+        codes.forEach(c => {
+            if (!c.order && c.meta?.specialOrderId) {
+                specialOrderIds.push(c.meta.specialOrderId);
+            }
+        });
+
+        if (specialOrderIds.length > 0) {
+            const specialOrders = await SpecialOrder.find({ _id: { $in: specialOrderIds } })
+                .select("code total items status createdAt")
+                .lean();
+            const specialMap = new Map(specialOrders.map(s => [String(s._id), s]));
+
+            // Merge into codes
+            codes.forEach(c => {
+                if (!c.order && c.meta?.specialOrderId) {
+                    const s = specialMap.get(String(c.meta.specialOrderId));
+                    if (s) {
+                        c.order = { ...s, isSpecial: true };
+                    }
+                }
+            });
+        }
 
 
         // Return full code objects so client has everything

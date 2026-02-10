@@ -1,6 +1,6 @@
 // app/api/admin/products/route.js
 import { NextResponse } from 'next/server';
-import { connectToDatabase, Product, AuditLog } from '../../../../models/allModels.js';
+import { connectToDatabase, Product, AuditLog, Inventory } from '../../../../models/allModels.js';
 
 /**
  * GET: list products (query params: search, category, available)
@@ -31,7 +31,22 @@ export async function GET(req) {
         if (available === 'false') q.available = false;
 
         const products = await Product.find(q).sort({ name: 1 }).lean();
-        return NextResponse.json({ ok: true, products });
+
+        // Attach inventory counts
+        const productsWithStock = await Promise.all(products.map(async (p) => {
+            // Check if inventory is tracked for this product
+            const countDocs = await Inventory.countDocuments({ product: p._id, active: true });
+            
+            if (countDocs > 0) {
+                const stock = await Inventory.getTotalForProduct(p._id);
+                return { ...p, stock };
+            }
+            
+            // If no inventory records exist, treat as unlimited/untracked (stock: null)
+            return { ...p, stock: null };
+        }));
+
+        return NextResponse.json({ ok: true, products: productsWithStock });
     } catch (err) {
         console.error('GET /api/admin/products error', err);
         return NextResponse.json({ ok: false, error: err.message }, { status: 500 });

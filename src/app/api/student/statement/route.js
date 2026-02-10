@@ -74,7 +74,17 @@ export async function GET(req) {
         const limit = Math.min(500, Math.max(1, parseInt(url.searchParams.get('limit') || '200', 10)));
         const since = url.searchParams.get('since') || null; // optional ISO date
 
-        let userIdOrReg = session?.user?.id || session?.user?.regNumber || devReg || null;
+        let userIdOrReg = null;
+        const userRole = session?.user?.role || '';
+        const isAdmin = ['admin', 'accounting', 'it'].includes(userRole);
+
+        // If admin and regNumber/userId provided, use that. Otherwise use session user.
+        if (isAdmin && devReg) {
+            userIdOrReg = devReg;
+        } else {
+            userIdOrReg = session?.user?.id || session?.user?.regNumber || devReg || null;
+        }
+
         if (!userIdOrReg) {
             return NextResponse.json({ ok: false, error: 'Not authenticated (no user)' }, { status: 401 });
         }
@@ -100,22 +110,22 @@ export async function GET(req) {
         const txs = await Transaction.find(query)
             .sort({ createdAt: -1 })
             .limit(limit)
-            .populate({ path: 'relatedOrder', select: 'code status total' })
+            .populate({ path: 'relatedOrder', select: 'code status total items' })
             .lean();
 
         const specialIds = txs.map(t => t?.meta?.specialOrderId).filter(Boolean);
         let specialMap = {};
         if (specialIds.length) {
-            const specials = await SpecialOrder.find({ _id: { $in: specialIds } }).select('code status total').lean();
+            const specials = await SpecialOrder.find({ _id: { $in: specialIds } }).select('code status total items').lean();
             specialMap = Object.fromEntries(specials.map(s => [String(s._id), s]));
         }
 
         // compute running balances optionally and normalize
         const txsOut = txs.map(t => {
             const rel = t.relatedOrder
-                ? { id: t.relatedOrder._id?.toString ? t.relatedOrder._id.toString() : t.relatedOrder._id, code: t.relatedOrder.code, status: t.relatedOrder.status, total: t.relatedOrder.total }
+                ? { id: t.relatedOrder._id?.toString ? t.relatedOrder._id.toString() : t.relatedOrder._id, code: t.relatedOrder.code, status: t.relatedOrder.status, total: t.relatedOrder.total, items: t.relatedOrder.items, isSpecial: false }
                 : (t?.meta?.specialOrderId && specialMap[String(t.meta.specialOrderId)]
-                    ? { id: String(t.meta.specialOrderId), code: specialMap[String(t.meta.specialOrderId)].code, status: specialMap[String(t.meta.specialOrderId)].status, total: specialMap[String(t.meta.specialOrderId)].total }
+                    ? { id: String(t.meta.specialOrderId), code: specialMap[String(t.meta.specialOrderId)].code, status: specialMap[String(t.meta.specialOrderId)].status, total: specialMap[String(t.meta.specialOrderId)].total, items: specialMap[String(t.meta.specialOrderId)].items, isSpecial: true }
                     : null);
             return {
                 id: t._id?.toString ? t._id.toString() : t._id,

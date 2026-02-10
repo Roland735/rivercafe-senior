@@ -2,7 +2,7 @@
 import { NextResponse } from 'next/server';
 
 import mongoose from 'mongoose';
-import { connectToDatabase, Transaction, User } from '@/models/allModels';
+import { connectToDatabase, Transaction, User, SpecialOrder } from '@/models/allModels';
 ;
 
 /**
@@ -66,21 +66,38 @@ export async function GET(req) {
             .skip(skip)
             .limit(limit)
             .populate('user', 'name regNumber')
+            .populate('relatedOrder', 'code status total')
             .lean();
 
+        // fetch special orders referenced in meta
+        const specialIds = docs.map(d => d?.meta?.specialOrderId).filter(Boolean);
+        let specialMap = {};
+        if (specialIds.length) {
+            const specials = await SpecialOrder.find({ _id: { $in: specialIds } }).select('code status total category').lean();
+            specialMap = Object.fromEntries(specials.map(s => [String(s._id), s]));
+        }
+
         // normalize output: show user as small object
-        const transactions = docs.map(d => ({
-            _id: d._id,
-            user: d.user ? { id: d.user._id, name: d.user.name, regNumber: d.user.regNumber } : null,
-            type: d.type,
-            amount: d.amount,
-            balanceBefore: d.balanceBefore,
-            balanceAfter: d.balanceAfter,
-            relatedOrder: d.relatedOrder || null,
-            note: d.note || '',
-            meta: d.meta || {},
-            createdAt: d.createdAt
-        }));
+        const transactions = docs.map(d => {
+            const rel = d.relatedOrder
+                ? { id: d.relatedOrder._id, code: d.relatedOrder.code, status: d.relatedOrder.status, total: d.relatedOrder.total }
+                : (d?.meta?.specialOrderId && specialMap[String(d.meta.specialOrderId)]
+                    ? { id: String(d.meta.specialOrderId), code: specialMap[String(d.meta.specialOrderId)].code, status: specialMap[String(d.meta.specialOrderId)].status, total: specialMap[String(d.meta.specialOrderId)].total, isSpecial: true }
+                    : null);
+
+            return {
+                _id: d._id,
+                user: d.user ? { id: d.user._id, name: d.user.name, regNumber: d.user.regNumber } : null,
+                type: d.type,
+                amount: d.amount,
+                balanceBefore: d.balanceBefore,
+                balanceAfter: d.balanceAfter,
+                relatedOrder: rel,
+                note: d.note || '',
+                meta: d.meta || {},
+                createdAt: d.createdAt
+            };
+        });
 
         return NextResponse.json({ ok: true, total, transactions });
     } catch (err) {

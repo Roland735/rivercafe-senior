@@ -2,12 +2,21 @@
 
 import React, { useEffect, useState, useRef } from "react";
 import { useSession, signIn } from "next-auth/react";
-import { FiShoppingCart, FiCopy } from "react-icons/fi";
+import { FiShoppingCart, FiCopy, FiInfo } from "react-icons/fi";
 
 export default function AdminExternalOrderPage() {
   const { data: session, status } = useSession();
 
+  // Regular menu state
   const [products, setProducts] = useState([]);
+  
+  // Special menu state
+  const [activeTab, setActiveTab] = useState("regular"); // "regular" | "special"
+  const [specialWindows, setSpecialWindows] = useState([]);
+  const [specialProducts, setSpecialProducts] = useState([]);
+  const [selectedWindowId, setSelectedWindowId] = useState("");
+
+  // Shared state
   const [cart, setCart] = useState([]);
   const [issuedToName, setIssuedToName] = useState("");
   const [expiresInMinutes, setExpiresInMinutes] = useState(60);
@@ -21,6 +30,7 @@ export default function AdminExternalOrderPage() {
 
   useEffect(() => {
     fetchProducts();
+    fetchSpecialData();
     fetchExternalOrders();
     // start polling every 5s
     pollRef.current = setInterval(fetchExternalOrders, 5000);
@@ -39,6 +49,26 @@ export default function AdminExternalOrderPage() {
       else setProducts(Array.isArray(data) ? data : data.products || []);
     } catch (e) {
       console.error(e);
+    }
+  }
+
+  async function fetchSpecialData() {
+    try {
+      // Fetch windows
+      const resWin = await fetch("/api/admin/special-ordering-windows");
+      const dataWin = await resWin.json();
+      if (dataWin.ok && Array.isArray(dataWin.windows)) {
+        setSpecialWindows(dataWin.windows.filter(w => w.active)); // Only active windows by default? Or all? Let's show active.
+      }
+
+      // Fetch products
+      const resProd = await fetch("/api/admin/special-products?available=true");
+      const dataProd = await resProd.json();
+      if (dataProd.ok && Array.isArray(dataProd.products)) {
+        setSpecialProducts(dataProd.products);
+      }
+    } catch (e) {
+      console.error("Error fetching special data", e);
     }
   }
 
@@ -74,6 +104,20 @@ export default function AdminExternalOrderPage() {
       }
     } catch (e) {
       console.error("fetchExternalOrders error", e);
+    }
+  }
+
+  function handleTabChange(tab) {
+    if (tab !== activeTab) {
+      if (cart.length > 0) {
+        if (!confirm("Switching menus will clear your current cart. Continue?")) {
+          return;
+        }
+      }
+      setCart([]);
+      setActiveTab(tab);
+      setError(null);
+      setResult(null);
     }
   }
 
@@ -113,13 +157,22 @@ export default function AdminExternalOrderPage() {
     setError(null);
     setResult(null);
     if (!cart.length) return setError("Cart is empty");
+    
+    // For special orders, ensure window is selected
+    if (activeTab === "special" && !selectedWindowId) {
+      return setError("Please select a special ordering window");
+    }
+
     setLoading(true);
     try {
       const body = {
         items: cart.map((i) => ({ productId: i.product._id, qty: i.qty })),
         issuedToName,
         expiresInMinutes,
+        isSpecial: activeTab === "special",
+        orderingWindowId: activeTab === "special" ? selectedWindowId : undefined
       };
+
       const res = await fetch("/api/admin/external-order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -132,6 +185,7 @@ export default function AdminExternalOrderPage() {
       } else {
         setResult(data);
         setCart([]);
+        // Don't reset selectedWindowId immediately in case they want to issue another for same window
 
         // prepend new code to the list immediately
         if (data.externalCode) {
@@ -158,6 +212,12 @@ export default function AdminExternalOrderPage() {
       setLoading(false);
     }
   }
+
+  // Filter special products based on selected window
+  const selectedWindow = specialWindows.find(w => w._id === selectedWindowId);
+  const visibleSpecialProducts = selectedWindow 
+    ? specialProducts.filter(p => p.category === selectedWindow.category)
+    : [];
 
   if (status === "loading") return <div className="p-6">Loading...</div>;
   if (status === "unauthenticated") {
@@ -198,40 +258,137 @@ export default function AdminExternalOrderPage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <section className="col-span-2 bg-slate-800 p-4 rounded-lg border border-slate-700">
-            <h2 className="font-medium mb-3">Menu</h2>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-              {products.map((p) => (
-                <div
-                  key={p._id}
-                  className="p-3 bg-slate-900 rounded border border-slate-700"
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-medium">Menu</h2>
+              <div className="flex bg-slate-900 rounded p-1">
+                <button
+                  onClick={() => handleTabChange("regular")}
+                  className={`px-3 py-1 rounded text-sm ${
+                    activeTab === "regular"
+                      ? "bg-cyan-600 text-white"
+                      : "text-slate-400 hover:text-white"
+                  }`}
                 >
-                  <div className="font-medium text-sm">{p.name}</div>
-                  <div className="text-xs text-slate-400">
-                    {Intl.NumberFormat("en-ZW", {
-                      style: "currency",
-                      currency:
-                        process.env.NEXT_PUBLIC_DEFAULT_CURRENCY || "USD",
-                    }).format(p.price || 0)}
-                  </div>
-                  <div className="mt-2 flex items-center justify-between">
-                    <button
-                      onClick={() => addToCart(p)}
-                      className="px-2 py-1 rounded bg-cyan-600 text-white text-sm"
-                    >
-                      Add
-                    </button>
+                  Regular
+                </button>
+                <button
+                  onClick={() => handleTabChange("special")}
+                  className={`px-3 py-1 rounded text-sm ${
+                    activeTab === "special"
+                      ? "bg-purple-600 text-white"
+                      : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  Special Order
+                </button>
+              </div>
+            </div>
+
+            {activeTab === "regular" && (
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                {products.map((p) => (
+                  <div
+                    key={p._id}
+                    className="p-3 bg-slate-900 rounded border border-slate-700"
+                  >
+                    <div className="font-medium text-sm">{p.name}</div>
                     <div className="text-xs text-slate-400">
-                      {p.category || ""}
+                      {Intl.NumberFormat("en-ZW", {
+                        style: "currency",
+                        currency:
+                          process.env.NEXT_PUBLIC_DEFAULT_CURRENCY || "USD",
+                      }).format(p.price || 0)}
+                    </div>
+                    <div className="mt-2 flex items-center justify-between">
+                      <button
+                        onClick={() => addToCart(p)}
+                        className="px-2 py-1 rounded bg-cyan-600 text-white text-sm"
+                      >
+                        Add
+                      </button>
+                      <div className="text-xs text-slate-400">
+                        {p.category || ""}
+                      </div>
                     </div>
                   </div>
+                ))}
+                {products.length === 0 && (
+                  <div className="col-span-full text-slate-400 text-sm py-4">
+                    No regular products available.
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activeTab === "special" && (
+              <div className="space-y-4">
+                <div className="bg-slate-900 p-3 rounded border border-slate-700">
+                  <label className="block text-xs text-slate-400 mb-1">
+                    Select Special Ordering Window
+                  </label>
+                  <select
+                    value={selectedWindowId}
+                    onChange={(e) => {
+                      setSelectedWindowId(e.target.value);
+                      setCart([]); // Clear cart when switching windows to avoid mix-up
+                    }}
+                    className="w-full p-2 rounded bg-slate-800 text-white border border-slate-600"
+                  >
+                    <option value="">-- Select Window --</option>
+                    {specialWindows.map((w) => (
+                      <option key={w._id} value={w._id}>
+                        {w.name} ({w.category})
+                      </option>
+                    ))}
+                  </select>
                 </div>
-              ))}
-            </div>
+
+                {selectedWindowId ? (
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    {visibleSpecialProducts.map((p) => (
+                      <div
+                        key={p._id}
+                        className="p-3 bg-slate-900 rounded border border-slate-700"
+                      >
+                        <div className="font-medium text-sm">{p.name}</div>
+                        <div className="text-xs text-slate-400">
+                          {Intl.NumberFormat("en-ZW", {
+                            style: "currency",
+                            currency:
+                              process.env.NEXT_PUBLIC_DEFAULT_CURRENCY || "USD",
+                          }).format(p.price || 0)}
+                        </div>
+                        <div className="mt-2 flex items-center justify-between">
+                          <button
+                            onClick={() => addToCart(p)}
+                            className="px-2 py-1 rounded bg-purple-600 text-white text-sm"
+                          >
+                            Add
+                          </button>
+                          <div className="text-xs text-slate-400">
+                            {p.sku || ""}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    {visibleSpecialProducts.length === 0 && (
+                      <div className="col-span-full text-slate-400 text-sm py-4">
+                        No products found for this window ({selectedWindow?.category}).
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-slate-400 text-sm py-4 text-center">
+                    Please select an ordering window to view special menu.
+                  </div>
+                )}
+              </div>
+            )}
           </section>
 
           <aside className="bg-slate-800 p-4 rounded-lg border border-slate-700">
             <h3 className="font-medium flex items-center gap-2">
-              Cart <FiShoppingCart />
+              {activeTab === 'special' ? 'Special Order Cart' : 'Cart'} <FiShoppingCart />
             </h3>
 
             <div className="mt-3 space-y-2">
@@ -319,7 +476,9 @@ export default function AdminExternalOrderPage() {
                   <button
                     disabled={loading}
                     type="submit"
-                    className="px-3 py-2 rounded bg-green-600"
+                    className={`px-3 py-2 rounded ${
+                      activeTab === 'special' ? 'bg-purple-600' : 'bg-green-600'
+                    }`}
                   >
                     {loading ? "Issuing..." : "Issue pickup code"}
                   </button>
@@ -400,20 +559,24 @@ export default function AdminExternalOrderPage() {
             <div className="grid gap-2">
               {externalOrders.map((c) => {
                 const id = c._id || c.id || c._doc?._id || c.id;
+                const isSpecial = c.order?.isSpecial || c.order?.category || (c.order?.code && c.order.code.startsWith('SP-'));
                 return (
                   <div
                     key={String(id) + String(c.code)}
                     className="flex items-center justify-between bg-slate-900 p-3 rounded border border-slate-700"
                   >
                     <div>
-                      <div className="font-medium">
+                      <div className="font-medium flex items-center gap-2">
                         {c.issuedToName ||
                           (c.issuedBy?.name
                             ? `Issued by ${c.issuedBy?.name}`
                             : "External customer")}
+                        {isSpecial && (
+                            <span className="text-[10px] px-1 rounded bg-purple-900 text-purple-200 border border-purple-700">Special</span>
+                        )}
                       </div>
                       <div className="text-xs text-slate-400">
-                        Code: <span className="font-mono">{c.order.code}</span>{" "}
+                        Code: <span className="font-mono">{c.order?.code || c.code}</span>{" "}
                         • Created:{" "}
                         {new Date(c.createdAt || c.createdAt).toLocaleString()}
                       </div>
@@ -439,7 +602,7 @@ export default function AdminExternalOrderPage() {
                     <div className="flex flex-col items-end gap-2">
                       <button
                         onClick={() =>
-                          navigator.clipboard.writeText(c.order.code)
+                          navigator.clipboard.writeText(c.order?.code || c.code)
                         }
                         className="px-3 py-1 rounded bg-cyan-600 text-sm"
                       >
