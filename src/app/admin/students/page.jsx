@@ -20,6 +20,10 @@ export default function AdminStudentsPage() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [sortBy, setSortBy] = useState("name");
+  const [sortOrder, setSortOrder] = useState("asc");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [balanceFilter, setBalanceFilter] = useState("all");
   const [selectedStudent, setSelectedStudent] = useState(null); // for modal
   const [statement, setStatement] = useState(null); // statement data
   const [loadingStatement, setLoadingStatement] = useState(false);
@@ -35,7 +39,7 @@ export default function AdminStudentsPage() {
 
   useEffect(() => {
     fetchStudents();
-  }, [page, search]);
+  }, [page, search, sortBy, sortOrder, statusFilter, balanceFilter]);
 
   async function fetchStudents() {
     setLoading(true);
@@ -44,7 +48,12 @@ export default function AdminStudentsPage() {
         page,
         limit: 20,
         search,
+        sortBy,
+        sortOrder,
       });
+      if (statusFilter !== "all") params.append("status", statusFilter);
+      if (balanceFilter !== "all") params.append("balance", balanceFilter);
+
       const res = await fetch(`/api/admin/students?${params}`);
       const data = await res.json();
       if (data.ok) {
@@ -276,6 +285,30 @@ export default function AdminStudentsPage() {
     }
   }
 
+  function handleSort(field) {
+    if (sortBy === field) {
+      setSortOrder(sortOrder === "asc" ? "desc" : "asc");
+    } else {
+      setSortBy(field);
+      // Default sort direction based on field type
+      if (field === "balance" || field === "createdAt") {
+        setSortOrder("desc");
+      } else {
+        setSortOrder("asc");
+      }
+    }
+  }
+
+  function renderSortIcon(field) {
+    if (sortBy !== field)
+      return <span className="text-slate-600 ml-1 text-xs">⇅</span>;
+    return sortOrder === "asc" ? (
+      <span className="text-cyan-400 ml-1">↑</span>
+    ) : (
+      <span className="text-cyan-400 ml-1">↓</span>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-900 p-6 text-slate-100">
       <div className="max-w-6xl mx-auto space-y-6">
@@ -308,16 +341,101 @@ export default function AdminStudentsPage() {
           />
         </div>
 
+        {/* Filters and Sort */}
+        <div className="flex flex-wrap gap-4 bg-slate-800 p-4 rounded-xl border border-slate-700">
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-slate-400 font-medium uppercase">
+              Sort By
+            </label>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              className="bg-slate-900 border border-slate-700 rounded px-3 py-2 text-sm focus:outline-none focus:border-cyan-500"
+            >
+              <option value="name">Name</option>
+              <option value="regNumber">Reg Number</option>
+              <option value="balance">Balance</option>
+              <option value="createdAt">Date Created</option>
+            </select>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-slate-400 font-medium uppercase">
+              Order
+            </label>
+            <select
+              value={sortOrder}
+              onChange={(e) => setSortOrder(e.target.value)}
+              className="bg-slate-900 border border-slate-700 rounded px-3 py-2 text-sm focus:outline-none focus:border-cyan-500"
+            >
+              <option value="asc">Ascending</option>
+              <option value="desc">Descending</option>
+            </select>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-slate-400 font-medium uppercase">
+              Status
+            </label>
+            <select
+              value={statusFilter}
+              onChange={(e) => {
+                setStatusFilter(e.target.value);
+                setPage(1);
+              }}
+              className="bg-slate-900 border border-slate-700 rounded px-3 py-2 text-sm focus:outline-none focus:border-cyan-500"
+            >
+              <option value="all">All Status</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-slate-400 font-medium uppercase">
+              Balance
+            </label>
+            <select
+              value={balanceFilter}
+              onChange={(e) => {
+                setBalanceFilter(e.target.value);
+                setPage(1);
+              }}
+              className="bg-slate-900 border border-slate-700 rounded px-3 py-2 text-sm focus:outline-none focus:border-cyan-500"
+            >
+              <option value="all">All Balances</option>
+              <option value="positive">Positive (&gt; 0)</option>
+              <option value="negative">Negative (&lt; 0)</option>
+              <option value="zero">Zero (0)</option>
+            </select>
+          </div>
+        </div>
+
         {/* Table */}
         <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead className="bg-slate-900/50 text-slate-400 uppercase tracking-wider font-semibold">
                 <tr>
-                  <th className="p-4">Name</th>
-                  <th className="p-4">Reg Number</th>
+                  <th
+                    className="p-4 cursor-pointer hover:text-slate-200 select-none transition-colors"
+                    onClick={() => handleSort("name")}
+                  >
+                    Name {renderSortIcon("name")}
+                  </th>
+                  <th
+                    className="p-4 cursor-pointer hover:text-slate-200 select-none transition-colors"
+                    onClick={() => handleSort("regNumber")}
+                  >
+                    Reg Number {renderSortIcon("regNumber")}
+                  </th>
                   <th className="p-4">Email</th>
-                  <th className="p-4 text-right">Balance</th>
+                  <th
+                    className="p-4 text-right cursor-pointer hover:text-slate-200 select-none transition-colors"
+                    onClick={() => handleSort("balance")}
+                  >
+                    Balance {renderSortIcon("balance")}
+                  </th>
                   <th className="p-4 text-center">Actions</th>
                 </tr>
               </thead>
