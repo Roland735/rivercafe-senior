@@ -121,7 +121,11 @@ export default function AdminStudentsPage() {
 
   function handleEditOrder(order) {
     try {
-      setEditingOrder(order);
+      const normalizedOrder = {
+        ...order,
+        _id: order?._id || order?.id || "",
+      };
+      setEditingOrder(normalizedOrder);
       // Deep copy items to avoid mutating original reference
       setEditItems(
         order.items.map((it) => ({
@@ -239,6 +243,11 @@ export default function AdminStudentsPage() {
 
   async function saveOrderChanges() {
     if (!editingOrder) return;
+    const orderId = editingOrder._id || editingOrder.id;
+    if (!orderId) {
+      alert("Error: Invalid order id");
+      return;
+    }
     if (editItems.length === 0) {
       alert("Order must have at least one item.");
       return;
@@ -248,7 +257,7 @@ export default function AdminStudentsPage() {
 
     setSavingOrder(true);
     try {
-      const res = await fetch(`/api/admin/orders/${editingOrder._id}`, {
+      const res = await fetch(`/api/admin/orders/${orderId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ items: editItems }),
