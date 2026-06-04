@@ -1,6 +1,6 @@
 // app/(student)/place-order/page.jsx  (updated StudentOrderPage)
 "use client";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   FiArrowLeft,
@@ -30,6 +30,7 @@ function fmtCurrency(n) {
 }
 
 export default function StudentOrderPage() {
+  const menuSectionRef = useRef(null);
   const [orderType, setOrderType] = useState("ordinary");
   const [menu, setMenu] = useState([]);
   const [loadingMenu, setLoadingMenu] = useState(true);
@@ -508,6 +509,16 @@ export default function StudentOrderPage() {
     !!snackOfTheDay &&
     (snackOfTheDayStock === null || snackOfTheDayQty < snackOfTheDayStock);
 
+  function scrollToFullMenu() {
+    setActiveCategory("all");
+    window.requestAnimationFrame(() => {
+      menuSectionRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+  }
+
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 p-4 md:p-6">
       <div className="max-w-7xl mx-auto space-y-6">
@@ -694,9 +705,7 @@ export default function StudentOrderPage() {
                       </div>
                     )}
                     <button
-                      onClick={() => {
-                        setActiveCategory("all");
-                      }}
+                      onClick={scrollToFullMenu}
                       className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-800 hover:bg-slate-50"
                     >
                       View full menu
@@ -865,7 +874,7 @@ export default function StudentOrderPage() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div ref={menuSectionRef} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Menu Section */}
           <div className="lg:col-span-2">
             {!isSpecial && freshArrivalProducts.length > 0 && (
