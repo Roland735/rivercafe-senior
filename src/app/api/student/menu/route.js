@@ -98,12 +98,25 @@ export async function GET(req) {
                 (sum, d) => sum + Number(d?.metadata?.restockedFromZeroCount || 0),
                 0,
             );
+            const hasRecentInventoryUpdate = invDocs.some((d) => {
+                const updatedAt = d?.updatedAt ? new Date(d.updatedAt) : null;
+                const createdAt = d?.createdAt ? new Date(d.createdAt) : null;
+                if (!updatedAt || Number.isNaN(updatedAt.getTime())) return false;
+                if (!createdAt || Number.isNaN(createdAt.getTime())) return true;
+                return updatedAt.getTime() > createdAt.getTime();
+            });
+            const hasRestockSignal =
+                !!lastRestockedAt ||
+                restockedFromZeroCount > 0 ||
+                hasRecentInventoryUpdate;
             const isBackByDemand =
                 stock > 0 &&
-                !!lastRestockedAt &&
+                Number(salesByProduct.get(String(p._id)) || 0) > 0 &&
+                hasRestockSignal &&
                 (!!lastOutOfStockAt
-                    ? lastRestockedAt.getTime() >= lastOutOfStockAt.getTime()
-                    : restockedFromZeroCount > 0);
+                    ? !lastRestockedAt ||
+                      lastRestockedAt.getTime() >= lastOutOfStockAt.getTime()
+                    : true);
             const isNewArrival = newestVisibleIds.has(String(p._id));
 
             return {

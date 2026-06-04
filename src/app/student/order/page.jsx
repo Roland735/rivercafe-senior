@@ -452,31 +452,29 @@ export default function StudentOrderPage() {
     (item) => typeof item.stock !== "number" || Number(item.stock) > 0,
   );
   const displayMenu = isSpecial ? specialMenu : visibleRegularMenu;
-  const trendyProducts = isSpecial
+  const freshArrivalProducts = isSpecial
     ? []
     : visibleRegularMenu
-        .filter(
-          (item) =>
-            item.isNewArrival || item.isBackByDemand || isTrendyProduct(item),
-        )
+        .filter((item) => item.isNewArrival || isTrendyProduct(item))
         .sort((a, b) => {
-          if (!!b.isBackByDemand !== !!a.isBackByDemand) {
-            return Number(!!b.isBackByDemand) - Number(!!a.isBackByDemand);
-          }
           if (!!b.isNewArrival !== !!a.isNewArrival) {
             return Number(!!b.isNewArrival) - Number(!!a.isNewArrival);
           }
           return Number(b.salesCount || 0) - Number(a.salesCount || 0);
         })
-        .slice(0, 6);
-  const featuredProducts =
-    trendyProducts.length > 0 ? trendyProducts : visibleRegularMenu.slice(0, 4);
-  const newArrivalCount = featuredProducts.filter(
-    (item) => item.isNewArrival,
-  ).length;
-  const backByDemandCount = featuredProducts.filter(
-    (item) => item.isBackByDemand,
-  ).length;
+        .slice(0, 4);
+  const backByDemandProducts = isSpecial
+    ? []
+    : visibleRegularMenu
+        .filter((item) => item.isBackByDemand)
+        .sort((a, b) => Number(b.salesCount || 0) - Number(a.salesCount || 0))
+        .slice(0, 4);
+  const featuredIds = new Set([
+    ...freshArrivalProducts.map((item) => String(item._id || item.id)),
+    ...backByDemandProducts.map((item) => String(item._id || item.id)),
+  ]);
+  const newArrivalCount = freshArrivalProducts.length;
+  const backByDemandCount = backByDemandProducts.length;
 
   const categories = [
     "all",
@@ -488,16 +486,17 @@ export default function StudentOrderPage() {
     activeCategory === "all"
       ? displayMenu
       : displayMenu.filter((item) => item.category === activeCategory);
-  const featuredIds = new Set(
-    featuredProducts.map((item) => String(item._id || item.id)),
-  );
   const standardMenu =
-    !isSpecial && featuredProducts.length > 0
+    !isSpecial && featuredIds.size > 0
       ? filteredMenu.filter(
           (item) => !featuredIds.has(String(item._id || item.id)),
         )
       : filteredMenu;
-  const snackOfTheDay = featuredProducts[0] || null;
+  const snackOfTheDay =
+    backByDemandProducts[0] ||
+    freshArrivalProducts[0] ||
+    visibleRegularMenu[0] ||
+    null;
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 p-4 md:p-6">
@@ -821,19 +820,19 @@ export default function StudentOrderPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Menu Section */}
           <div className="lg:col-span-2">
-            {!isSpecial && featuredProducts.length > 0 && (
+            {!isSpecial && freshArrivalProducts.length > 0 && (
               <div className="mb-4 rounded-3xl border border-amber-300/30 bg-gradient-to-r from-yellow-300 via-amber-300 to-yellow-200 p-4 md:p-5 text-slate-950 shadow-[0_16px_40px_rgba(251,191,36,0.16)]">
                 <div className="flex items-center justify-between gap-3 mb-4">
                   <div>
                     <div className="text-xs font-bold uppercase tracking-[0.28em] text-amber-950/80">
-                      New Trendy Products
+                      Fresh Arrivals
                     </div>
                     <h2 className="text-xl md:text-2xl font-extrabold mt-1">
-                      Fresh arrivals and back-by-demand favourites
+                      Fresh arrivals students should try first
                     </h2>
                     <p className="text-sm text-slate-900/80 mt-1">
-                      The newest products land here first, and sold-out
-                      favourites return with a back-by-demand spotlight.
+                      Recently added products land here first so students can
+                      spot the newest bites quickly.
                     </p>
                   </div>
                   <div className="hidden md:flex flex-col items-end gap-2">
@@ -841,13 +840,13 @@ export default function StudentOrderPage() {
                       Hot at RiverCafe
                     </div>
                     <div className="text-xs font-semibold text-slate-900/80">
-                      {newArrivalCount} new, {backByDemandCount} back by demand
+                      {newArrivalCount} fresh arrivals
                     </div>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {featuredProducts.map((p) => {
+                  {freshArrivalProducts.map((p) => {
                     const pid = String(p._id || p.id);
                     const cartQty = currentCart.get(pid) || 0;
                     const stock =
@@ -861,19 +860,8 @@ export default function StudentOrderPage() {
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div>
-                            <div className="flex flex-wrap gap-2">
-                              <div className="inline-flex rounded-full bg-amber-500 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.2em] text-black">
-                                {p.isBackByDemand
-                                  ? "Back by Demand"
-                                  : p.isNewArrival
-                                    ? "New Arrival"
-                                    : "Trendy Pick"}
-                              </div>
-                              {p.isBackByDemand && (
-                                <div className="inline-flex rounded-full bg-slate-950 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-white">
-                                  Top seller comeback
-                                </div>
-                              )}
+                            <div className="inline-flex rounded-full bg-amber-500 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.2em] text-black">
+                              {p.isNewArrival ? "New Arrival" : "Trendy Pick"}
                             </div>
                             <div className="mt-2 text-lg font-bold">
                               {p.name}
@@ -891,15 +879,94 @@ export default function StudentOrderPage() {
 
                         <div className="mt-3 flex items-center justify-between gap-3">
                           <div className="text-sm text-slate-700">
-                            {p.isBackByDemand
-                              ? `Back after selling fast${
-                                  p.salesCount
-                                    ? ` with ${p.salesCount} recent sales`
-                                    : ""
-                                }.`
-                              : p.isNewArrival
-                                ? "Freshly added to the menu and ready to try."
-                                : "Fresh, fun, and easy to grab before class."}
+                            {p.isNewArrival
+                              ? "Freshly added to the menu and ready to try."
+                              : "Fresh, fun, and easy to grab before class."}
+                          </div>
+                          <button
+                            className="rounded-xl bg-slate-950 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                            onClick={() => addQty(pid, 1)}
+                            disabled={!canAdd}
+                          >
+                            Add now
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {!isSpecial && backByDemandProducts.length > 0 && (
+              <div className="mb-4 rounded-3xl border border-cyan-300/30 bg-gradient-to-r from-cyan-200 via-sky-200 to-blue-200 p-4 md:p-5 text-slate-950 shadow-[0_16px_40px_rgba(34,211,238,0.16)]">
+                <div className="flex items-center justify-between gap-3 mb-4">
+                  <div>
+                    <div className="text-xs font-bold uppercase tracking-[0.28em] text-cyan-950/80">
+                      Back by Demand
+                    </div>
+                    <h2 className="text-xl md:text-2xl font-extrabold mt-1">
+                      Restocked favourites students asked for again
+                    </h2>
+                    <p className="text-sm text-slate-900/80 mt-1">
+                      This section only shows products that were restocked and
+                      are back after strong demand.
+                    </p>
+                  </div>
+                  <div className="hidden md:flex flex-col items-end gap-2">
+                    <div className="rounded-full bg-white/60 px-4 py-2 text-sm font-bold">
+                      Popular Comebacks
+                    </div>
+                    <div className="text-xs font-semibold text-slate-900/80">
+                      {backByDemandCount} restocked favourites
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {backByDemandProducts.map((p) => {
+                    const pid = String(p._id || p.id);
+                    const cartQty = currentCart.get(pid) || 0;
+                    const stock =
+                      typeof p.stock === "number" ? Number(p.stock) : null;
+                    const canAdd = stock === null || cartQty < stock;
+
+                    return (
+                      <div
+                        key={pid}
+                        className="rounded-2xl border border-cyan-100/80 bg-white/70 p-4 backdrop-blur-sm"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="flex flex-wrap gap-2">
+                              <div className="inline-flex rounded-full bg-cyan-500 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.2em] text-white">
+                                Back by Demand
+                              </div>
+                              <div className="inline-flex rounded-full bg-slate-950 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-white">
+                                Restocked
+                              </div>
+                            </div>
+                            <div className="mt-2 text-lg font-bold">
+                              {p.name}
+                            </div>
+                            {p.category && (
+                              <div className="mt-1 text-xs font-semibold text-slate-700">
+                                {p.category}
+                              </div>
+                            )}
+                          </div>
+                          <div className="text-lg font-extrabold text-cyan-700">
+                            {fmtCurrency(p.price)}
+                          </div>
+                        </div>
+
+                        <div className="mt-3 flex items-center justify-between gap-3">
+                          <div className="text-sm text-slate-700">
+                            {`Restocked after demand${
+                              p.salesCount
+                                ? ` with ${p.salesCount} recent sales`
+                                : ""
+                            }.`}
                           </div>
                           <button
                             className="rounded-xl bg-slate-950 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
