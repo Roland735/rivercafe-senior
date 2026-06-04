@@ -454,9 +454,29 @@ export default function StudentOrderPage() {
   const displayMenu = isSpecial ? specialMenu : visibleRegularMenu;
   const trendyProducts = isSpecial
     ? []
-    : visibleRegularMenu.filter(isTrendyProduct).slice(0, 4);
+    : visibleRegularMenu
+        .filter(
+          (item) =>
+            item.isNewArrival || item.isBackByDemand || isTrendyProduct(item),
+        )
+        .sort((a, b) => {
+          if (!!b.isBackByDemand !== !!a.isBackByDemand) {
+            return Number(!!b.isBackByDemand) - Number(!!a.isBackByDemand);
+          }
+          if (!!b.isNewArrival !== !!a.isNewArrival) {
+            return Number(!!b.isNewArrival) - Number(!!a.isNewArrival);
+          }
+          return Number(b.salesCount || 0) - Number(a.salesCount || 0);
+        })
+        .slice(0, 6);
   const featuredProducts =
     trendyProducts.length > 0 ? trendyProducts : visibleRegularMenu.slice(0, 4);
+  const newArrivalCount = featuredProducts.filter(
+    (item) => item.isNewArrival,
+  ).length;
+  const backByDemandCount = featuredProducts.filter(
+    (item) => item.isBackByDemand,
+  ).length;
 
   const categories = [
     "all",
@@ -656,7 +676,7 @@ export default function StudentOrderPage() {
                 </div>
 
                 <div className="self-center">
-                  <div className="relative h-40 w-40">
+                  <div className="relative h-44 w-44">
                     <div className="absolute inset-0 rounded-full bg-slate-950/10" />
                     <div className="absolute left-8 top-4 h-24 w-24 rounded-full bg-amber-500 shadow-lg">
                       <div className="absolute left-5 top-8 h-3 w-3 rounded-full bg-slate-950" />
@@ -666,6 +686,12 @@ export default function StudentOrderPage() {
                     </div>
                     <div className="absolute right-3 top-3 rounded-2xl bg-white px-3 py-2 text-xs font-bold text-slate-900 shadow-lg">
                       Yum time at RiverCafe
+                    </div>
+                    <div className="absolute -left-2 top-2 max-w-[120px] rounded-2xl border-2 border-slate-900 bg-white px-3 py-2 text-[11px] font-bold text-slate-900 shadow-lg">
+                      Psst... special orders bring the lunchtime magic.
+                    </div>
+                    <div className="absolute -right-4 bottom-14 max-w-[120px] rounded-2xl border-2 border-slate-900 bg-cyan-100 px-3 py-2 text-[11px] font-bold text-slate-900 shadow-lg">
+                      New bites and back-by-demand picks are here now.
                     </div>
                     <div className="absolute left-2 bottom-4 h-14 w-14 rounded-2xl bg-red-500 shadow-md" />
                     <div className="absolute left-7 bottom-10 h-3 w-3 rounded-full bg-yellow-300" />
@@ -701,6 +727,15 @@ export default function StudentOrderPage() {
                   <div className="text-sm text-slate-300 mt-1">
                     Check the special menu for limited picks and lunchtime-only
                     treats.
+                  </div>
+                </div>
+                <div className="rounded-2xl bg-slate-900/60 p-3 border border-slate-700">
+                  <div className="font-semibold text-pink-200">
+                    Comic special
+                  </div>
+                  <div className="text-sm text-slate-300 mt-1">
+                    Follow the comic bubbles and jump into special orders when
+                    you want an extra fun lunch.
                   </div>
                 </div>
                 <div className="rounded-2xl bg-slate-900/60 p-3 border border-slate-700">
@@ -794,15 +829,20 @@ export default function StudentOrderPage() {
                       New Trendy Products
                     </div>
                     <h2 className="text-xl md:text-2xl font-extrabold mt-1">
-                      Top picks students are loving right now
+                      Fresh arrivals and back-by-demand favourites
                     </h2>
                     <p className="text-sm text-slate-900/80 mt-1">
-                      Start here for the coolest bites before checking the rest
-                      of the menu.
+                      The newest products land here first, and sold-out
+                      favourites return with a back-by-demand spotlight.
                     </p>
                   </div>
-                  <div className="hidden md:block rounded-full bg-white/60 px-4 py-2 text-sm font-bold">
-                    Hot at RiverCafe
+                  <div className="hidden md:flex flex-col items-end gap-2">
+                    <div className="rounded-full bg-white/60 px-4 py-2 text-sm font-bold">
+                      Hot at RiverCafe
+                    </div>
+                    <div className="text-xs font-semibold text-slate-900/80">
+                      {newArrivalCount} new, {backByDemandCount} back by demand
+                    </div>
                   </div>
                 </div>
 
@@ -821,8 +861,19 @@ export default function StudentOrderPage() {
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div>
-                            <div className="inline-flex rounded-full bg-amber-500 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.2em] text-black">
-                              Trendy Pick
+                            <div className="flex flex-wrap gap-2">
+                              <div className="inline-flex rounded-full bg-amber-500 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.2em] text-black">
+                                {p.isBackByDemand
+                                  ? "Back by Demand"
+                                  : p.isNewArrival
+                                    ? "New Arrival"
+                                    : "Trendy Pick"}
+                              </div>
+                              {p.isBackByDemand && (
+                                <div className="inline-flex rounded-full bg-slate-950 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-white">
+                                  Top seller comeback
+                                </div>
+                              )}
                             </div>
                             <div className="mt-2 text-lg font-bold">
                               {p.name}
@@ -840,7 +891,15 @@ export default function StudentOrderPage() {
 
                         <div className="mt-3 flex items-center justify-between gap-3">
                           <div className="text-sm text-slate-700">
-                            Fresh, fun, and easy to grab before class.
+                            {p.isBackByDemand
+                              ? `Back after selling fast${
+                                  p.salesCount
+                                    ? ` with ${p.salesCount} recent sales`
+                                    : ""
+                                }.`
+                              : p.isNewArrival
+                                ? "Freshly added to the menu and ready to try."
+                                : "Fresh, fun, and easy to grab before class."}
                           </div>
                           <button
                             className="rounded-xl bg-slate-950 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"

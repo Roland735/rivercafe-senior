@@ -143,10 +143,26 @@ export async function POST(req) {
 
         let saved;
         if (existing) {
+            const beforeQuantity = Number(existing.quantity || 0);
+            const nextQuantity = Number(quantity);
+            const metadata = existing.metadata || {};
             existing.quantity = Number(quantity);
             existing.lowStockThreshold = Number(lowStockThreshold || 0);
             existing.active = active === false ? false : true;
-            existing.metadata = existing.metadata || {};
+            existing.metadata = {
+                ...metadata,
+                previousQuantity: beforeQuantity,
+                lastStockChangeAt: new Date(),
+                ...(beforeQuantity > 0 && nextQuantity <= 0
+                    ? { lastOutOfStockAt: new Date() }
+                    : {}),
+                ...(beforeQuantity <= 0 && nextQuantity > 0
+                    ? {
+                        lastRestockedAt: new Date(),
+                        restockedFromZeroCount: Number(metadata.restockedFromZeroCount || 0) + 1,
+                    }
+                    : {}),
+            };
             saved = await existing.save();
             // audit
             try {
@@ -161,13 +177,20 @@ export async function POST(req) {
             } catch (e) { /* ignore audit errors */ }
         } else {
             // create one inventory row (auto-create when product has none)
+            const initialQuantity = Number(quantity);
             const doc = {
                 product: productId,
-                quantity: Number(quantity),
+                quantity: initialQuantity,
                 location: String(location || "").trim(),
                 lowStockThreshold: Number(lowStockThreshold || 0),
                 active: active === false ? false : true,
-                metadata: {},
+                metadata: {
+                    previousQuantity: 0,
+                    lastStockChangeAt: new Date(),
+                    ...(initialQuantity > 0 ? { lastRestockedAt: new Date() } : {}),
+                    ...(initialQuantity <= 0 ? { lastOutOfStockAt: new Date() } : {}),
+                    restockedFromZeroCount: initialQuantity > 0 ? 1 : 0,
+                },
             };
             saved = await Inventory.create(doc);
             // audit
@@ -210,10 +233,27 @@ export async function PATCH(req) {
         const inv = await Inventory.findById(inventoryId);
         if (!inv) return NextResponse.json({ ok: false, error: "Inventory row not found" }, { status: 404 });
 
+        const beforeQuantity = Number(inv.quantity || 0);
         if (quantity !== undefined) inv.quantity = Number(quantity);
         if (location !== undefined) inv.location = String(location);
         if (lowStockThreshold !== undefined) inv.lowStockThreshold = Number(lowStockThreshold);
         if (active !== undefined) inv.active = !!active;
+        const nextQuantity = Number(inv.quantity || 0);
+        const metadata = inv.metadata || {};
+        inv.metadata = {
+            ...metadata,
+            previousQuantity: beforeQuantity,
+            lastStockChangeAt: new Date(),
+            ...(beforeQuantity > 0 && nextQuantity <= 0
+                ? { lastOutOfStockAt: new Date() }
+                : {}),
+            ...(beforeQuantity <= 0 && nextQuantity > 0
+                ? {
+                    lastRestockedAt: new Date(),
+                    restockedFromZeroCount: Number(metadata.restockedFromZeroCount || 0) + 1,
+                }
+                : {}),
+        };
 
         const saved = await inv.save();
 
