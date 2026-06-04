@@ -473,9 +473,6 @@ export default function StudentOrderPage() {
     ...freshArrivalProducts.map((item) => String(item._id || item.id)),
     ...backByDemandProducts.map((item) => String(item._id || item.id)),
   ]);
-  const newArrivalCount = freshArrivalProducts.length;
-  const backByDemandCount = backByDemandProducts.length;
-
   const categories = [
     "all",
     ...new Set(displayMenu.map((item) => item.category).filter(Boolean)),
@@ -643,60 +640,95 @@ export default function StudentOrderPage() {
 
         {!isSpecial && (
           <div className="grid grid-cols-1 xl:grid-cols-[1.5fr_1fr] gap-4">
-            <div className="relative overflow-hidden rounded-3xl border border-amber-300/40 bg-gradient-to-r from-amber-200 via-yellow-200 to-amber-300 p-5 md:p-6 text-slate-950 shadow-[0_20px_60px_rgba(251,191,36,0.18)]">
+            <div className="relative overflow-hidden rounded-3xl border border-amber-300/40 bg-gradient-to-r from-amber-200 via-yellow-200 to-orange-200 p-5 md:p-6 text-slate-950 shadow-[0_20px_60px_rgba(251,191,36,0.18)]">
               <div className="absolute -top-10 -right-10 h-32 w-32 rounded-full bg-white/30 blur-2xl" />
-              <div className="absolute bottom-0 right-8 h-20 w-20 rounded-full bg-amber-400/40 blur-xl" />
-              <div className="relative flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
+              <div className="absolute bottom-0 right-8 h-20 w-20 rounded-full bg-orange-400/30 blur-xl" />
+              <div className="relative flex flex-col gap-6">
                 <div className="max-w-2xl">
                   <div className="inline-flex items-center rounded-full bg-slate-950/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.25em] text-amber-950">
-                    RiverCafe Snack Rush
+                    Snack of the Day
                   </div>
                   <h2 className="mt-3 text-2xl md:text-3xl font-extrabold leading-tight">
-                    Fresh bites, trendy picks, and special orders that make
-                    lunch the best part of the day.
+                    Today&apos;s hero snack is{" "}
+                    <span className="underline decoration-white/70 decoration-4 underline-offset-4">
+                      {snackOfTheDay?.name || "RiverCafe favourite"}
+                    </span>
+                    , ready to steal the lunch-time spotlight.
                   </h2>
                   <p className="mt-3 max-w-xl text-sm md:text-base text-slate-900/80">
-                    Grab the snack of the day, try our new trendy products
-                    first, and watch for special orders when you want something
-                    extra fun.
+                    A comic-style RiverCafe adventure starts here with today&apos;s
+                    featured snack, plus special orders for students who want
+                    something extra magical at lunchtime.
                   </p>
                   <div className="mt-4 flex flex-wrap gap-2 text-sm font-semibold">
                     <span className="rounded-full bg-white/70 px-3 py-1">
-                      Snack of the day:{" "}
-                      {snackOfTheDay?.name || "Fresh favourite"}
+                      Hero snack: {snackOfTheDay?.name || "Fresh favourite"}
+                    </span>
+                    <span className="rounded-full bg-white/70 px-3 py-1">
+                      Comic lunch vibes
                     </span>
                     <span className="rounded-full bg-white/70 px-3 py-1">
                       Special orders at lunchtime
                     </span>
-                    <span className="rounded-full bg-white/70 px-3 py-1">
-                      Fast pickup with your code
-                    </span>
                   </div>
                 </div>
 
-                <div className="self-center">
-                  <div className="relative h-44 w-44">
-                    <div className="absolute inset-0 rounded-full bg-slate-950/10" />
-                    <div className="absolute left-8 top-4 h-24 w-24 rounded-full bg-amber-500 shadow-lg">
-                      <div className="absolute left-5 top-8 h-3 w-3 rounded-full bg-slate-950" />
-                      <div className="absolute right-5 top-8 h-3 w-3 rounded-full bg-slate-950" />
-                      <div className="absolute left-1/2 top-12 h-5 w-1 -translate-x-1/2 rounded-full bg-slate-950" />
-                      <div className="absolute left-1/2 top-16 h-6 w-10 -translate-x-1/2 rounded-b-full border-b-4 border-slate-950" />
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="rounded-3xl border-2 border-slate-900/20 bg-white/60 p-4 shadow-lg">
+                    <div className="relative h-28">
+                      <div className="absolute left-1/2 top-2 h-16 w-16 -translate-x-1/2 rounded-full bg-red-500 shadow-md" />
+                      <div className="absolute left-1/2 top-10 h-12 w-20 -translate-x-1/2 rounded-[24px] bg-blue-600 shadow-md" />
+                      <div className="absolute left-[calc(50%-18px)] top-7 h-2.5 w-2.5 rounded-full bg-white" />
+                      <div className="absolute left-[calc(50%+7px)] top-7 h-2.5 w-2.5 rounded-full bg-white" />
+                      <div className="absolute left-1/2 top-12 h-5 w-8 -translate-x-1/2 rounded-b-full border-b-4 border-white" />
+                      <div className="absolute right-0 top-0 max-w-[110px] rounded-2xl border-2 border-slate-900 bg-white px-3 py-2 text-[11px] font-bold text-slate-900">
+                        Hero snack power-up!
+                      </div>
                     </div>
-                    <div className="absolute right-3 top-3 rounded-2xl bg-white px-3 py-2 text-xs font-bold text-slate-900 shadow-lg">
-                      Yum time at RiverCafe
+                    <div className="mt-2 text-sm font-bold uppercase tracking-[0.2em] text-red-700">
+                      City Hero
                     </div>
-                    <div className="absolute -left-2 top-2 max-w-[120px] rounded-2xl border-2 border-slate-900 bg-white px-3 py-2 text-[11px] font-bold text-slate-900 shadow-lg">
-                      Psst... special orders bring the lunchtime magic.
+                    <div className="mt-1 text-sm text-slate-800">
+                      Swings in first for the snack of the day before the queue gets long.
                     </div>
-                    <div className="absolute -right-4 bottom-14 max-w-[120px] rounded-2xl border-2 border-slate-900 bg-cyan-100 px-3 py-2 text-[11px] font-bold text-slate-900 shadow-lg">
-                      New bites and back-by-demand picks are here now.
+                  </div>
+
+                  <div className="rounded-3xl border-2 border-slate-900/20 bg-white/60 p-4 shadow-lg">
+                    <div className="relative h-28">
+                      <div className="absolute left-1/2 top-2 h-16 w-16 -translate-x-1/2 rounded-full bg-amber-300 shadow-md" />
+                      <div className="absolute left-1/2 top-10 h-12 w-20 -translate-x-1/2 rounded-[24px] bg-pink-400 shadow-md" />
+                      <div className="absolute left-[calc(50%-18px)] top-7 h-2.5 w-2.5 rounded-full bg-slate-900" />
+                      <div className="absolute left-[calc(50%+7px)] top-7 h-2.5 w-2.5 rounded-full bg-slate-900" />
+                      <div className="absolute left-1/2 top-12 h-5 w-8 -translate-x-1/2 rounded-b-full border-b-4 border-slate-900" />
+                      <div className="absolute right-0 top-1 max-w-[110px] rounded-2xl border-2 border-slate-900 bg-white px-3 py-2 text-[11px] font-bold text-slate-900">
+                        Special orders feel magical.
+                      </div>
                     </div>
-                    <div className="absolute left-2 bottom-4 h-14 w-14 rounded-2xl bg-red-500 shadow-md" />
-                    <div className="absolute left-7 bottom-10 h-3 w-3 rounded-full bg-yellow-300" />
-                    <div className="absolute left-12 bottom-6 h-3 w-3 rounded-full bg-yellow-300" />
-                    <div className="absolute right-5 bottom-5 h-16 w-12 rounded-t-[999px] rounded-b-2xl bg-cyan-500 shadow-md" />
-                    <div className="absolute right-7 bottom-12 h-4 w-8 rounded-full bg-white/80" />
+                    <div className="mt-2 text-sm font-bold uppercase tracking-[0.2em] text-pink-700">
+                      Royal Dreamer
+                    </div>
+                    <div className="mt-1 text-sm text-slate-800">
+                      Loves the special-order menu for a little lunchtime sparkle.
+                    </div>
+                  </div>
+
+                  <div className="rounded-3xl border-2 border-slate-900/20 bg-white/60 p-4 shadow-lg">
+                    <div className="relative h-28">
+                      <div className="absolute left-1/2 top-2 h-16 w-16 -translate-x-1/2 rounded-full bg-orange-300 shadow-md" />
+                      <div className="absolute left-1/2 top-10 h-12 w-20 -translate-x-1/2 rounded-[24px] bg-cyan-500 shadow-md" />
+                      <div className="absolute left-[calc(50%-18px)] top-7 h-2.5 w-2.5 rounded-full bg-slate-900" />
+                      <div className="absolute left-[calc(50%+7px)] top-7 h-2.5 w-2.5 rounded-full bg-slate-900" />
+                      <div className="absolute left-1/2 top-12 h-5 w-8 -translate-x-1/2 rounded-b-full border-b-4 border-slate-900" />
+                      <div className="absolute right-0 top-1 max-w-[110px] rounded-2xl border-2 border-slate-900 bg-white px-3 py-2 text-[11px] font-bold text-slate-900">
+                        Ocean-fresh lunch quest!
+                      </div>
+                    </div>
+                    <div className="mt-2 text-sm font-bold uppercase tracking-[0.2em] text-cyan-700">
+                      Ocean Explorer
+                    </div>
+                    <div className="mt-1 text-sm text-slate-800">
+                      Mixes today's snack hero with special orders for an adventure-worthy lunch.
+                    </div>
                   </div>
                 </div>
               </div>
@@ -839,9 +871,6 @@ export default function StudentOrderPage() {
                     <div className="rounded-full bg-white/60 px-4 py-2 text-sm font-bold">
                       Hot at RiverCafe
                     </div>
-                    <div className="text-xs font-semibold text-slate-900/80">
-                      {newArrivalCount} fresh arrivals
-                    </div>
                   </div>
                 </div>
 
@@ -916,9 +945,6 @@ export default function StudentOrderPage() {
                   <div className="hidden md:flex flex-col items-end gap-2">
                     <div className="rounded-full bg-white/60 px-4 py-2 text-sm font-bold">
                       Popular Comebacks
-                    </div>
-                    <div className="text-xs font-semibold text-slate-900/80">
-                      {backByDemandCount} restocked favourites
                     </div>
                   </div>
                 </div>
