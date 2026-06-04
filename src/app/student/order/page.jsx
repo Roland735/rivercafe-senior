@@ -73,6 +73,20 @@ export default function StudentOrderPage() {
     ? "bg-amber-500 text-black hover:bg-amber-400"
     : "bg-cyan-600 text-white hover:bg-cyan-500";
 
+  function isTrendyProduct(product) {
+    const tags = Array.isArray(product?.tags) ? product.tags : [];
+    const normalizedTags = tags.map((tag) => String(tag || "").toLowerCase());
+    const metadata = product?.metadata || {};
+    return (
+      normalizedTags.some((tag) =>
+        ["trendy", "new", "new arrival", "popular", "featured"].includes(tag),
+      ) ||
+      metadata?.trendy === true ||
+      metadata?.featured === true ||
+      metadata?.newArrival === true
+    );
+  }
+
   useEffect(() => {
     loadMenu();
     loadOrderingWindows();
@@ -324,7 +338,7 @@ export default function StudentOrderPage() {
       setError(
         isSpecial
           ? "Special ordering is currently closed (no active window)."
-          : "Ordering is currently closed (no active ordering window)."
+          : "Ordering is currently closed (no active ordering window).",
       );
       return;
     }
@@ -333,14 +347,14 @@ export default function StudentOrderPage() {
       const categorySet = new Set();
       for (const it of items) {
         const p = currentMenu.find(
-          (m) => String(m._id || m.id) === String(it.productId)
+          (m) => String(m._id || m.id) === String(it.productId),
         );
         if (p?.category) categorySet.add(String(p.category));
       }
       const cats = Array.from(categorySet).filter(Boolean);
       if (cats.length !== 1) {
         setError(
-          "Special orders must be placed for a single category at a time."
+          "Special orders must be placed for a single category at a time.",
         );
         return;
       }
@@ -356,20 +370,20 @@ export default function StudentOrderPage() {
     if (!isSpecial) {
       for (const it of items) {
         const p = menu.find(
-          (m) => String(m._id || m.id) === String(it.productId)
+          (m) => String(m._id || m.id) === String(it.productId),
         );
         if (!p) continue;
         const stock = typeof p.stock === "number" ? Number(p.stock) : null;
 
         if (stock === 0) {
           setError(
-            `"${p.name}" is out of stock and cannot be ordered right now.`
+            `"${p.name}" is out of stock and cannot be ordered right now.`,
           );
           return;
         }
         if (stock !== null && it.qty > stock) {
           setError(
-            `Requested quantity for "${p.name}" exceeds available stock.`
+            `Requested quantity for "${p.name}" exceeds available stock.`,
           );
           return;
         }
@@ -385,7 +399,7 @@ export default function StudentOrderPage() {
           credentials: "include",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ items }),
-        }
+        },
       );
 
       // Better handling for 402 (Insufficient balance)
@@ -393,7 +407,7 @@ export default function StudentOrderPage() {
         const body = await res.json().catch(() => ({}));
         setError(
           (body?.error || "Insufficient balance") +
-            ". Please request a top-up from admin (email admin@rivercafe.local) or deposit funds."
+            ". Please request a top-up from admin (email admin@rivercafe.local) or deposit funds.",
         );
         return;
       }
@@ -407,7 +421,7 @@ export default function StudentOrderPage() {
       } else {
         // success: show code and clear cart
         setOrderResult(
-          body.order || { code: body.code, id: body.id, total: body.total }
+          body.order || { code: body.code, id: body.id, total: body.total },
         );
         clearCart();
         // reload menu to refresh stock info
@@ -434,16 +448,36 @@ export default function StudentOrderPage() {
   }
 
   // Get unique categories
+  const visibleRegularMenu = menu.filter(
+    (item) => typeof item.stock !== "number" || Number(item.stock) > 0,
+  );
+  const displayMenu = isSpecial ? specialMenu : visibleRegularMenu;
+  const trendyProducts = isSpecial
+    ? []
+    : visibleRegularMenu.filter(isTrendyProduct).slice(0, 4);
+  const featuredProducts =
+    trendyProducts.length > 0 ? trendyProducts : visibleRegularMenu.slice(0, 4);
+
   const categories = [
     "all",
-    ...new Set(currentMenu.map((item) => item.category).filter(Boolean)),
+    ...new Set(displayMenu.map((item) => item.category).filter(Boolean)),
   ];
 
   // Filter menu by category
   const filteredMenu =
     activeCategory === "all"
-      ? currentMenu
-      : currentMenu.filter((item) => item.category === activeCategory);
+      ? displayMenu
+      : displayMenu.filter((item) => item.category === activeCategory);
+  const featuredIds = new Set(
+    featuredProducts.map((item) => String(item._id || item.id)),
+  );
+  const standardMenu =
+    !isSpecial && featuredProducts.length > 0
+      ? filteredMenu.filter(
+          (item) => !featuredIds.has(String(item._id || item.id)),
+        )
+      : filteredMenu;
+  const snackOfTheDay = featuredProducts[0] || null;
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 p-4 md:p-6">
@@ -588,6 +622,101 @@ export default function StudentOrderPage() {
           </div>
         )}
 
+        {!isSpecial && (
+          <div className="grid grid-cols-1 xl:grid-cols-[1.5fr_1fr] gap-4">
+            <div className="relative overflow-hidden rounded-3xl border border-amber-300/40 bg-gradient-to-r from-amber-200 via-yellow-200 to-amber-300 p-5 md:p-6 text-slate-950 shadow-[0_20px_60px_rgba(251,191,36,0.18)]">
+              <div className="absolute -top-10 -right-10 h-32 w-32 rounded-full bg-white/30 blur-2xl" />
+              <div className="absolute bottom-0 right-8 h-20 w-20 rounded-full bg-amber-400/40 blur-xl" />
+              <div className="relative flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
+                <div className="max-w-2xl">
+                  <div className="inline-flex items-center rounded-full bg-slate-950/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.25em] text-amber-950">
+                    RiverCafe Snack Rush
+                  </div>
+                  <h2 className="mt-3 text-2xl md:text-3xl font-extrabold leading-tight">
+                    Fresh bites, trendy picks, and special orders that make
+                    lunch the best part of the day.
+                  </h2>
+                  <p className="mt-3 max-w-xl text-sm md:text-base text-slate-900/80">
+                    Grab the snack of the day, try our new trendy products
+                    first, and watch for special orders when you want something
+                    extra fun.
+                  </p>
+                  <div className="mt-4 flex flex-wrap gap-2 text-sm font-semibold">
+                    <span className="rounded-full bg-white/70 px-3 py-1">
+                      Snack of the day:{" "}
+                      {snackOfTheDay?.name || "Fresh favourite"}
+                    </span>
+                    <span className="rounded-full bg-white/70 px-3 py-1">
+                      Special orders at lunchtime
+                    </span>
+                    <span className="rounded-full bg-white/70 px-3 py-1">
+                      Fast pickup with your code
+                    </span>
+                  </div>
+                </div>
+
+                <div className="self-center">
+                  <div className="relative h-40 w-40">
+                    <div className="absolute inset-0 rounded-full bg-slate-950/10" />
+                    <div className="absolute left-8 top-4 h-24 w-24 rounded-full bg-amber-500 shadow-lg">
+                      <div className="absolute left-5 top-8 h-3 w-3 rounded-full bg-slate-950" />
+                      <div className="absolute right-5 top-8 h-3 w-3 rounded-full bg-slate-950" />
+                      <div className="absolute left-1/2 top-12 h-5 w-1 -translate-x-1/2 rounded-full bg-slate-950" />
+                      <div className="absolute left-1/2 top-16 h-6 w-10 -translate-x-1/2 rounded-b-full border-b-4 border-slate-950" />
+                    </div>
+                    <div className="absolute right-3 top-3 rounded-2xl bg-white px-3 py-2 text-xs font-bold text-slate-900 shadow-lg">
+                      Yum time at RiverCafe
+                    </div>
+                    <div className="absolute left-2 bottom-4 h-14 w-14 rounded-2xl bg-red-500 shadow-md" />
+                    <div className="absolute left-7 bottom-10 h-3 w-3 rounded-full bg-yellow-300" />
+                    <div className="absolute left-12 bottom-6 h-3 w-3 rounded-full bg-yellow-300" />
+                    <div className="absolute right-5 bottom-5 h-16 w-12 rounded-t-[999px] rounded-b-2xl bg-cyan-500 shadow-md" />
+                    <div className="absolute right-7 bottom-12 h-4 w-8 rounded-full bg-white/80" />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-3xl border border-amber-300/30 bg-slate-800 p-5">
+              <div className="text-xs uppercase tracking-[0.25em] text-amber-300">
+                Why Students Love It
+              </div>
+              <div className="mt-3 space-y-3">
+                <div className="rounded-2xl bg-slate-900/60 p-3 border border-slate-700">
+                  <div className="font-semibold text-amber-200">
+                    Snack of the day
+                  </div>
+                  <div className="text-sm text-slate-300 mt-1">
+                    Today&apos;s spotlight is{" "}
+                    <span className="font-semibold text-white">
+                      {snackOfTheDay?.name || "a fresh RiverCafe favourite"}
+                    </span>
+                    .
+                  </div>
+                </div>
+                <div className="rounded-2xl bg-slate-900/60 p-3 border border-slate-700">
+                  <div className="font-semibold text-cyan-200">
+                    Special orders
+                  </div>
+                  <div className="text-sm text-slate-300 mt-1">
+                    Check the special menu for limited picks and lunchtime-only
+                    treats.
+                  </div>
+                </div>
+                <div className="rounded-2xl bg-slate-900/60 p-3 border border-slate-700">
+                  <div className="font-semibold text-green-200">
+                    Quick pickup
+                  </div>
+                  <div className="text-sm text-slate-300 mt-1">
+                    Order now, save time in the queue, and collect with one
+                    simple code.
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Alerts */}
         {error && (
           <div className="bg-red-900/30 border border-red-800 p-4 rounded-xl flex items-start gap-3">
@@ -657,6 +786,77 @@ export default function StudentOrderPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Menu Section */}
           <div className="lg:col-span-2">
+            {!isSpecial && featuredProducts.length > 0 && (
+              <div className="mb-4 rounded-3xl border border-amber-300/30 bg-gradient-to-r from-yellow-300 via-amber-300 to-yellow-200 p-4 md:p-5 text-slate-950 shadow-[0_16px_40px_rgba(251,191,36,0.16)]">
+                <div className="flex items-center justify-between gap-3 mb-4">
+                  <div>
+                    <div className="text-xs font-bold uppercase tracking-[0.28em] text-amber-950/80">
+                      New Trendy Products
+                    </div>
+                    <h2 className="text-xl md:text-2xl font-extrabold mt-1">
+                      Top picks students are loving right now
+                    </h2>
+                    <p className="text-sm text-slate-900/80 mt-1">
+                      Start here for the coolest bites before checking the rest
+                      of the menu.
+                    </p>
+                  </div>
+                  <div className="hidden md:block rounded-full bg-white/60 px-4 py-2 text-sm font-bold">
+                    Hot at RiverCafe
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {featuredProducts.map((p) => {
+                    const pid = String(p._id || p.id);
+                    const cartQty = currentCart.get(pid) || 0;
+                    const stock =
+                      typeof p.stock === "number" ? Number(p.stock) : null;
+                    const canAdd = stock === null || cartQty < stock;
+
+                    return (
+                      <div
+                        key={pid}
+                        className="rounded-2xl border border-amber-100/80 bg-white/70 p-4 backdrop-blur-sm"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="inline-flex rounded-full bg-amber-500 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.2em] text-black">
+                              Trendy Pick
+                            </div>
+                            <div className="mt-2 text-lg font-bold">
+                              {p.name}
+                            </div>
+                            {p.category && (
+                              <div className="mt-1 text-xs font-semibold text-slate-700">
+                                {p.category}
+                              </div>
+                            )}
+                          </div>
+                          <div className="text-lg font-extrabold text-amber-700">
+                            {fmtCurrency(p.price)}
+                          </div>
+                        </div>
+
+                        <div className="mt-3 flex items-center justify-between gap-3">
+                          <div className="text-sm text-slate-700">
+                            Fresh, fun, and easy to grab before class.
+                          </div>
+                          <button
+                            className="rounded-xl bg-slate-950 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                            onClick={() => addQty(pid, 1)}
+                            disabled={!canAdd}
+                          >
+                            Add now
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Category Filter */}
             {categories.length > 1 && (
               <div className="bg-slate-800 border border-slate-700 rounded-xl p-4 mb-4">
@@ -692,15 +892,15 @@ export default function StudentOrderPage() {
                       <FiLoader className="animate-spin" size={16} /> Loading…
                     </div>
                   ) : (
-                    `${filteredMenu.length} item${
-                      filteredMenu.length !== 1 ? "s" : ""
+                    `${standardMenu.length} item${
+                      standardMenu.length !== 1 ? "s" : ""
                     }`
                   )}
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {filteredMenu.map((p) => {
+                {standardMenu.map((p) => {
                   const pid = String(p._id || p.id);
                   const cartQty = currentCart.get(pid) || 0;
                   const stockKnown = typeof p.stock === "number";
@@ -771,12 +971,12 @@ export default function StudentOrderPage() {
                             stock === 0
                               ? "Out of stock"
                               : lowHurry
-                              ? "Low stock — order soon"
-                              : stock !== null
-                              ? cartQty >= stock
-                                ? "Max stock reached"
-                                : "Add"
-                              : "Add"
+                                ? "Low stock — order soon"
+                                : stock !== null
+                                  ? cartQty >= stock
+                                    ? "Max stock reached"
+                                    : "Add"
+                                  : "Add"
                           }
                         >
                           <FiPlus size={16} />
@@ -785,13 +985,17 @@ export default function StudentOrderPage() {
                     </div>
                   );
                 })}
-                {filteredMenu.length === 0 && !loadingMenu && (
+                {standardMenu.length === 0 && !currentLoadingMenu && (
                   <div className="col-span-full text-center py-8 text-slate-400">
                     <FiShoppingCart
                       size={32}
                       className="mx-auto mb-2 opacity-50"
                     />
-                    <p>No menu items available in this category.</p>
+                    <p>
+                      {activeCategory === "all"
+                        ? "No menu items are available right now."
+                        : "No menu items available in this category."}
+                    </p>
                   </div>
                 )}
               </div>

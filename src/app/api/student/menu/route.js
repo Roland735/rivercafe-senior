@@ -8,7 +8,7 @@ export async function GET(req) {
 
         // Return available products sorted by category/name
         const products = await Product.find({ available: true })
-            .select("name category price prepTimeMinutes imageUrl allergens notes metadata")
+            .select("name category price prepTimeMinutes imageUrl tags allergens notes metadata")
             .sort({ category: 1, name: 1 })
             .lean();
 
