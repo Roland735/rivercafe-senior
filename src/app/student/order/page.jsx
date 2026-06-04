@@ -494,6 +494,19 @@ export default function StudentOrderPage() {
     freshArrivalProducts[0] ||
     visibleRegularMenu[0] ||
     null;
+  const snackOfTheDayId = snackOfTheDay
+    ? String(snackOfTheDay._id || snackOfTheDay.id)
+    : null;
+  const snackOfTheDayQty = snackOfTheDayId
+    ? currentCart.get(snackOfTheDayId) || 0
+    : 0;
+  const snackOfTheDayStock =
+    snackOfTheDay && typeof snackOfTheDay.stock === "number"
+      ? Number(snackOfTheDay.stock)
+      : null;
+  const snackOfTheDayCanAdd =
+    !!snackOfTheDay &&
+    (snackOfTheDayStock === null || snackOfTheDayQty < snackOfTheDayStock);
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 p-4 md:p-6">
@@ -640,103 +653,118 @@ export default function StudentOrderPage() {
 
         {!isSpecial && (
           <div className="grid grid-cols-1 xl:grid-cols-[1.5fr_1fr] gap-4">
-            <div className="relative overflow-hidden rounded-3xl border border-amber-300/40 bg-gradient-to-r from-amber-200 via-yellow-200 to-orange-200 p-5 md:p-6 text-slate-950 shadow-[0_20px_60px_rgba(251,191,36,0.18)]">
+            <div className="relative overflow-hidden rounded-3xl border border-amber-300/40 bg-gradient-to-r from-amber-100 via-yellow-100 to-white p-5 md:p-6 text-slate-950 shadow-[0_20px_60px_rgba(251,191,36,0.14)]">
               <div className="absolute -top-10 -right-10 h-32 w-32 rounded-full bg-white/30 blur-2xl" />
-              <div className="absolute bottom-0 right-8 h-20 w-20 rounded-full bg-orange-400/30 blur-xl" />
-              <div className="relative flex flex-col gap-6">
-                <div className="max-w-2xl">
-                  <div className="inline-flex items-center rounded-full bg-slate-950/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.25em] text-amber-950">
+              <div className="absolute bottom-0 right-8 h-20 w-20 rounded-full bg-amber-400/20 blur-xl" />
+              <div className="relative grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] gap-5">
+                <div className="rounded-3xl border border-amber-200/70 bg-white/70 p-5 backdrop-blur-sm">
+                  <div className="inline-flex items-center rounded-full bg-amber-500/15 px-3 py-1 text-xs font-bold uppercase tracking-[0.25em] text-amber-900">
                     Snack of the Day
                   </div>
                   <h2 className="mt-3 text-2xl md:text-3xl font-extrabold leading-tight">
-                    Today&apos;s hero snack is{" "}
-                    <span className="underline decoration-white/70 decoration-4 underline-offset-4">
-                      {snackOfTheDay?.name || "RiverCafe favourite"}
-                    </span>
-                    , ready to steal the lunch-time spotlight.
+                    {snackOfTheDay?.name || "Today's featured snack"}
                   </h2>
-                  <p className="mt-3 max-w-xl text-sm md:text-base text-slate-900/80">
-                    A comic-style RiverCafe adventure starts here with today&apos;s
-                    featured snack, plus special orders for students who want
-                    something extra magical at lunchtime.
+                  <p className="mt-3 max-w-xl text-sm md:text-base text-slate-700">
+                    Today&apos;s featured pick is highlighted here so students
+                    can grab it quickly before moving on to the rest of the
+                    menu.
                   </p>
-                  <div className="mt-4 flex flex-wrap gap-2 text-sm font-semibold">
-                    <span className="rounded-full bg-white/70 px-3 py-1">
-                      Hero snack: {snackOfTheDay?.name || "Fresh favourite"}
-                    </span>
-                    <span className="rounded-full bg-white/70 px-3 py-1">
-                      Comic lunch vibes
-                    </span>
-                    <span className="rounded-full bg-white/70 px-3 py-1">
-                      Special orders at lunchtime
-                    </span>
+                  <div className="mt-5 flex flex-wrap items-center gap-3">
+                    <div className="text-2xl font-extrabold text-amber-700">
+                      {snackOfTheDay ? fmtCurrency(snackOfTheDay.price) : ""}
+                    </div>
+                    <div className="rounded-full bg-slate-900/5 px-3 py-1 text-sm font-semibold text-slate-700">
+                      Ready to add to your order
+                    </div>
+                  </div>
+
+                  <div className="mt-5 flex flex-wrap gap-3">
+                    <button
+                      onClick={() =>
+                        snackOfTheDayId ? addQty(snackOfTheDayId, 1) : null
+                      }
+                      disabled={!snackOfTheDayCanAdd}
+                      className="inline-flex items-center justify-center rounded-xl bg-amber-500 px-4 py-3 text-sm font-semibold text-black hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Add Snack of the Day
+                    </button>
+                    {snackOfTheDayQty > 0 && (
+                      <div className="inline-flex items-center rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white">
+                        In your order: {snackOfTheDayQty}
+                      </div>
+                    )}
+                    <button
+                      onClick={() => {
+                        setActiveCategory("all");
+                      }}
+                      className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-800 hover:bg-slate-50"
+                    >
+                      View full menu
+                    </button>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="rounded-3xl border-2 border-slate-900/20 bg-white/60 p-4 shadow-lg">
-                    <div className="relative h-28">
-                      <div className="absolute left-1/2 top-2 h-16 w-16 -translate-x-1/2 rounded-full bg-red-500 shadow-md" />
-                      <div className="absolute left-1/2 top-10 h-12 w-20 -translate-x-1/2 rounded-[24px] bg-blue-600 shadow-md" />
-                      <div className="absolute left-[calc(50%-18px)] top-7 h-2.5 w-2.5 rounded-full bg-white" />
-                      <div className="absolute left-[calc(50%+7px)] top-7 h-2.5 w-2.5 rounded-full bg-white" />
-                      <div className="absolute left-1/2 top-12 h-5 w-8 -translate-x-1/2 rounded-b-full border-b-4 border-white" />
-                      <div className="absolute right-0 top-0 max-w-[110px] rounded-2xl border-2 border-slate-900 bg-white px-3 py-2 text-[11px] font-bold text-slate-900">
-                        Hero snack power-up!
+                <div className="rounded-3xl border border-slate-700 bg-slate-900 p-5 text-slate-100">
+                  <div className="inline-flex items-center rounded-full bg-amber-500/15 px-3 py-1 text-xs font-bold uppercase tracking-[0.25em] text-amber-300">
+                    Special Orders
+                  </div>
+                  <h3 className="mt-3 text-xl md:text-2xl font-bold">
+                    Try SPECIAL ORDERS today
+                  </h3>
+                  <p className="mt-3 text-sm text-slate-300">
+                    Collect during lunchtime only. Use special orders when you
+                    want items from the special menu instead of the ordinary
+                    daily picks.
+                  </p>
+
+                  <div className="mt-4 space-y-3">
+                    <div className="rounded-2xl border border-slate-700 bg-slate-800/80 p-3">
+                      <div className="text-sm font-semibold text-amber-200">
+                        Collection Time
+                      </div>
+                      <div className="text-sm text-slate-300 mt-1">
+                        Special orders can only be collected during lunchtime.
                       </div>
                     </div>
-                    <div className="mt-2 text-sm font-bold uppercase tracking-[0.2em] text-red-700">
-                      City Hero
-                    </div>
-                    <div className="mt-1 text-sm text-slate-800">
-                      Swings in first for the snack of the day before the queue gets long.
+                    <div className="rounded-2xl border border-slate-700 bg-slate-800/80 p-3">
+                      <div className="text-sm font-semibold text-cyan-200">
+                        Best For
+                      </div>
+                      <div className="text-sm text-slate-300 mt-1">
+                        Limited picks, category-based specials, and lunchtime
+                        treats.
+                      </div>
                     </div>
                   </div>
 
-                  <div className="rounded-3xl border-2 border-slate-900/20 bg-white/60 p-4 shadow-lg">
-                    <div className="relative h-28">
-                      <div className="absolute left-1/2 top-2 h-16 w-16 -translate-x-1/2 rounded-full bg-amber-300 shadow-md" />
-                      <div className="absolute left-1/2 top-10 h-12 w-20 -translate-x-1/2 rounded-[24px] bg-pink-400 shadow-md" />
-                      <div className="absolute left-[calc(50%-18px)] top-7 h-2.5 w-2.5 rounded-full bg-slate-900" />
-                      <div className="absolute left-[calc(50%+7px)] top-7 h-2.5 w-2.5 rounded-full bg-slate-900" />
-                      <div className="absolute left-1/2 top-12 h-5 w-8 -translate-x-1/2 rounded-b-full border-b-4 border-slate-900" />
-                      <div className="absolute right-0 top-1 max-w-[110px] rounded-2xl border-2 border-slate-900 bg-white px-3 py-2 text-[11px] font-bold text-slate-900">
-                        Special orders feel magical.
-                      </div>
-                    </div>
-                    <div className="mt-2 text-sm font-bold uppercase tracking-[0.2em] text-pink-700">
-                      Royal Dreamer
-                    </div>
-                    <div className="mt-1 text-sm text-slate-800">
-                      Loves the special-order menu for a little lunchtime sparkle.
-                    </div>
-                  </div>
-
-                  <div className="rounded-3xl border-2 border-slate-900/20 bg-white/60 p-4 shadow-lg">
-                    <div className="relative h-28">
-                      <div className="absolute left-1/2 top-2 h-16 w-16 -translate-x-1/2 rounded-full bg-orange-300 shadow-md" />
-                      <div className="absolute left-1/2 top-10 h-12 w-20 -translate-x-1/2 rounded-[24px] bg-cyan-500 shadow-md" />
-                      <div className="absolute left-[calc(50%-18px)] top-7 h-2.5 w-2.5 rounded-full bg-slate-900" />
-                      <div className="absolute left-[calc(50%+7px)] top-7 h-2.5 w-2.5 rounded-full bg-slate-900" />
-                      <div className="absolute left-1/2 top-12 h-5 w-8 -translate-x-1/2 rounded-b-full border-b-4 border-slate-900" />
-                      <div className="absolute right-0 top-1 max-w-[110px] rounded-2xl border-2 border-slate-900 bg-white px-3 py-2 text-[11px] font-bold text-slate-900">
-                        Ocean-fresh lunch quest!
-                      </div>
-                    </div>
-                    <div className="mt-2 text-sm font-bold uppercase tracking-[0.2em] text-cyan-700">
-                      Ocean Explorer
-                    </div>
-                    <div className="mt-1 text-sm text-slate-800">
-                      Mixes today's snack hero with special orders for an adventure-worthy lunch.
+                  <div className="mt-5 flex flex-wrap gap-3">
+                    <button
+                      onClick={() => {
+                        if (specialOrders.enabled) {
+                          setOrderType("special");
+                          setActiveCategory("all");
+                          setError("");
+                          setOrderResult(null);
+                        }
+                      }}
+                      disabled={!specialOrders.enabled}
+                      className="inline-flex items-center justify-center rounded-xl bg-amber-500 px-4 py-3 text-sm font-semibold text-black hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Go to Special Orders
+                    </button>
+                    <div className="inline-flex items-center rounded-xl border border-slate-700 px-4 py-3 text-sm text-slate-300">
+                      {specialOrders.enabled
+                        ? "Available when the special window is open"
+                        : "Special orders are currently unavailable"}
                     </div>
                   </div>
                 </div>
               </div>
             </div>
 
-            <div className="rounded-3xl border border-amber-300/30 bg-slate-800 p-5">
+            <div className="rounded-3xl border border-slate-700 bg-slate-800 p-5">
               <div className="text-xs uppercase tracking-[0.25em] text-amber-300">
-                Why Students Love It
+                Order Highlights
               </div>
               <div className="mt-3 space-y-3">
                 <div className="rounded-2xl bg-slate-900/60 p-3 border border-slate-700">
@@ -744,11 +772,8 @@ export default function StudentOrderPage() {
                     Snack of the day
                   </div>
                   <div className="text-sm text-slate-300 mt-1">
-                    Today&apos;s spotlight is{" "}
-                    <span className="font-semibold text-white">
-                      {snackOfTheDay?.name || "a fresh RiverCafe favourite"}
-                    </span>
-                    .
+                    {snackOfTheDay?.name || "Today's featured item"} is
+                    highlighted above with a direct add button.
                   </div>
                 </div>
                 <div className="rounded-2xl bg-slate-900/60 p-3 border border-slate-700">
@@ -756,17 +781,8 @@ export default function StudentOrderPage() {
                     Special orders
                   </div>
                   <div className="text-sm text-slate-300 mt-1">
-                    Check the special menu for limited picks and lunchtime-only
-                    treats.
-                  </div>
-                </div>
-                <div className="rounded-2xl bg-slate-900/60 p-3 border border-slate-700">
-                  <div className="font-semibold text-pink-200">
-                    Comic special
-                  </div>
-                  <div className="text-sm text-slate-300 mt-1">
-                    Follow the comic bubbles and jump into special orders when
-                    you want an extra fun lunch.
+                    Switch to the special menu to place orders meant for
+                    lunchtime collection.
                   </div>
                 </div>
                 <div className="rounded-2xl bg-slate-900/60 p-3 border border-slate-700">
@@ -774,8 +790,8 @@ export default function StudentOrderPage() {
                     Quick pickup
                   </div>
                   <div className="text-sm text-slate-300 mt-1">
-                    Order now, save time in the queue, and collect with one
-                    simple code.
+                    Every successful order still gives you a pickup code for
+                    easy collection.
                   </div>
                 </div>
               </div>
