@@ -42,11 +42,21 @@ export default function AdminExternalOrderPage() {
   async function fetchProducts() {
     try {
       const q = new URLSearchParams({ available: "true" });
-      const res = await fetch(`/api/products?${q.toString()}`);
+      const res = await fetch(`/api/admin/products?${q.toString()}`);
       const data = await res.json();
-      if (data && data.ok && Array.isArray(data.products))
-        setProducts(data.products);
-      else setProducts(Array.isArray(data) ? data : data.products || []);
+      const nextProducts =
+        data && data.ok && Array.isArray(data.products)
+          ? data.products
+          : Array.isArray(data)
+            ? data
+            : data.products || [];
+
+      setProducts(
+        nextProducts.filter(
+          (product) =>
+            typeof product.stock !== "number" || product.stock > 0,
+        ),
+      );
     } catch (e) {
       console.error(e);
     }
