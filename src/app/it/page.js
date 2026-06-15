@@ -1,7 +1,7 @@
 // app/(it)/page.jsx
 'use client';
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
     FiRefreshCw,
     FiUpload,
@@ -62,6 +62,7 @@ export default function ITHomePage() {
     const [stats, setStats] = useState(null);
     const [health, setHealth] = useState(null);
     const [recentUsers, setRecentUsers] = useState([]);
+    const [usersLoading, setUsersLoading] = useState(false);
     const [refreshKey, setRefreshKey] = useState(0);
 
     // search state
@@ -97,9 +98,15 @@ export default function ITHomePage() {
 
     useEffect(() => {
         loadOverview();
-        loadRecentUsers();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [refreshKey]);
+
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            loadRecentUsers(search);
+        }, search.trim() ? 250 : 0);
+
+        return () => clearTimeout(timer);
+    }, [refreshKey, search]);
 
     async function loadOverview() {
         setLoading(true);
@@ -130,9 +137,15 @@ export default function ITHomePage() {
         }
     }
 
-    async function loadRecentUsers() {
+    async function loadRecentUsers(searchTerm = '') {
+        setUsersLoading(true);
         try {
-            const res = await fetch('/api/it/recent-users?limit=50', { cache: 'no-store' });
+            const params = new URLSearchParams({
+                limit: searchTerm.trim() ? '100' : '50'
+            });
+            if (searchTerm.trim()) params.set('search', searchTerm.trim());
+
+            const res = await fetch(`/api/it/recent-users?${params.toString()}`, { cache: 'no-store' });
             const body = await res.json();
             if (!body.ok) throw new Error(body.error || 'Failed to load recent users');
             setRecentUsers(body.users || []);
@@ -146,6 +159,8 @@ export default function ITHomePage() {
             } catch (e) {
                 setRecentUsers([]);
             }
+        } finally {
+            setUsersLoading(false);
         }
     }
 
@@ -322,18 +337,6 @@ export default function ITHomePage() {
         URL.revokeObjectURL(url);
     }
 
-    // ---------- filtered users ----------
-    const filteredUsers = useMemo(() => {
-        if (!search.trim()) return recentUsers;
-        const q = search.toLowerCase();
-        return recentUsers.filter(
-            (u) =>
-                (u.name && u.name.toLowerCase().includes(q)) ||
-                (u.email && u.email.toLowerCase().includes(q)) ||
-                (u.regNumber && u.regNumber.toLowerCase().includes(q))
-        );
-    }, [recentUsers, search]);
-
     return (
         <div className="p-4 space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -506,21 +509,27 @@ export default function ITHomePage() {
             {/* Recent users */}
             <div className="bg-slate-800 border border-slate-700 rounded-xl p-4">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-3 gap-3">
-                    <h3 className="text-lg font-semibold text-slate-100">Recent users</h3>
+                    <h3 className="text-lg font-semibold text-slate-100">
+                        {search.trim() ? 'User search results' : 'Recent users'}
+                    </h3>
                     <input
                         type="text"
-                        placeholder="Search users..."
+                        placeholder="Search all users..."
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
                         className="px-3 py-2 rounded bg-slate-900 text-slate-100 text-sm w-full sm:w-64"
                     />
                 </div>
 
-                {filteredUsers.length === 0 ? (
-                    <div className="text-sm text-slate-400">No users found.</div>
+                {usersLoading ? (
+                    <div className="text-sm text-slate-400">Loading users...</div>
+                ) : recentUsers.length === 0 ? (
+                    <div className="text-sm text-slate-400">
+                        {search.trim() ? 'No users found for that search.' : 'No users found.'}
+                    </div>
                 ) : (
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                        {filteredUsers.map((u) => (
+                        {recentUsers.map((u) => (
                             <div key={u._id} className="bg-slate-700 p-3 rounded flex flex-col">
                                 <div className="flex items-start justify-between">
                                     <div className="min-w-0">
