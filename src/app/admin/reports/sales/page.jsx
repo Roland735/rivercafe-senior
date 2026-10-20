@@ -31,6 +31,7 @@ export default function AdminSalesReportPage() {
   const [to, setTo] = useState("");
   const [thresholdMinutes, setThresholdMinutes] = useState(30);
   const [loading, setLoading] = useState(false);
+  const [pdfLoading, setPdfLoading] = useState(false);
   const [report, setReport] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState("All");
 
@@ -196,6 +197,127 @@ export default function AdminSalesReportPage() {
     URL.revokeObjectURL(url);
   }
 
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  function pdfCurrency(value) {
+    return escapeHtml(fmtCurrency(Number(value || 0)));
+  }
+
+  async function printPdfReport() {
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      alert("Please allow pop-ups to create the PDF report.");
+      return;
+    }
+
+    printWindow.document.write(
+      "<!doctype html><title>Preparing sales report...</title><p style='font:18px Arial;padding:24px'>Preparing sales report...</p>"
+    );
+    setPdfLoading(true);
+
+    try {
+      const params = new URLSearchParams({
+        period: "daily",
+        from: report?.from || from,
+        to: report?.to || to,
+        thresholdMinutes: String(thresholdMinutes || 30),
+      });
+      const response = await fetch(`/api/admin/reports/sales?${params}`, {
+        cache: "no-store",
+      });
+      const dailyReport = await response.json();
+      if (!dailyReport.ok) {
+        throw new Error(dailyReport.error || "Failed to prepare PDF report");
+      }
+
+      const categoryRows = (dailyReport.categories || [])
+        .map((category) => {
+          const row = dailyReport.byCategory?.[category] || {};
+          return `<tr><td>${escapeHtml(category)}</td><td>${Number(row.totalOrders || 0)}</td><td>${Number(row.totalUnits || 0)}</td><td>${pdfCurrency(row.totalRevenue)}</td></tr>`;
+        })
+        .join("");
+      const stockByProduct = new Map(
+        (dailyReport.inventoryTotals?.perProduct || []).map((product) => [
+          String(product.name || "").toLowerCase(),
+          Number(product.totalInventory || 0),
+        ])
+      );
+
+      const dateSections = (dailyReport.groups || [])
+        .map((group) => {
+          const productRows = (group.products || [])
+            .map(
+              (product) =>
+                `<tr><td>${escapeHtml(product.name)}</td><td>${Number(product.qty || 0)}</td><td>${escapeHtml(product.category)}</td><td>${pdfCurrency(product.revenue)}</td><td>${stockByProduct.get(String(product.name || "").toLowerCase()) ?? "-"}</td></tr>`
+            )
+            .join("");
+          const emptyRow = productRows
+            ? ""
+            : '<tr><td colspan="5" class="empty">No sales recorded</td></tr>';
+          const totalUnits = (group.products || []).reduce(
+            (sum, product) => sum + Number(product.qty || 0),
+            0
+          );
+          return `<section class="date-section">
+            <h2>${escapeHtml(group.key)}</h2>
+            <table><thead><tr><th>Product</th><th>Number of Sales</th><th>Category</th><th>Sales Revenue</th><th>Stock</th></tr></thead>
+            <tbody>${productRows}${emptyRow}</tbody>
+            <tfoot><tr><th>Total</th><th>${totalUnits}</th><th></th><th>${pdfCurrency(group.totalRevenue)}</th><th></th></tr></tfoot></table>
+          </section>`;
+        })
+        .join("");
+
+      const html = `<!doctype html><html><head><meta charset="utf-8"><title>Sales Report ${escapeHtml(dailyReport.from)} to ${escapeHtml(dailyReport.to)}</title>
+        <style>
+          @page { size: A4; margin: 16mm; }
+          * { box-sizing: border-box; }
+          body { margin: 0; color: #172033; font-family: Arial, Helvetica, sans-serif; font-size: 15px; line-height: 1.4; }
+          h1 { margin: 0 0 8px; font-size: 28px; color: #0f172a; }
+          h2 { margin: 0 0 14px; font-size: 22px; color: #0f172a; }
+          .subtitle { margin-bottom: 24px; font-size: 16px; color: #475569; }
+          .summary { margin-bottom: 28px; }
+          .summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 16px 0 20px; }
+          .card { padding: 14px; border: 1px solid #cbd5e1; border-radius: 8px; }
+          .card span { display: block; color: #64748b; font-size: 14px; }
+          .card strong { display: block; margin-top: 4px; font-size: 20px; }
+          table { width: 100%; border-collapse: collapse; font-size: 15px; }
+          th, td { padding: 11px 10px; border: 1px solid #94a3b8; text-align: left; vertical-align: top; }
+          thead th { background: #e2e8f0; font-size: 15px; }
+          tfoot th { background: #cbd5e1; font-size: 16px; }
+          .date-section { margin-top: 0; break-before: page; page-break-before: always; }
+          .date-section td:nth-child(2), .date-section td:nth-child(4), .date-section td:nth-child(5),
+          .date-section th:nth-child(2), .date-section th:nth-child(4), .date-section th:nth-child(5) { text-align: right; }
+          .empty { padding: 24px; text-align: center !important; color: #64748b; }
+          @media print { .no-print { display: none; } }
+        </style></head><body>
+        <header><h1>Sales Report</h1><div class="subtitle">${escapeHtml(dailyReport.from)} to ${escapeHtml(dailyReport.to)}</div></header>
+        <section class="summary"><h2>Overall report</h2>
+          <div class="summary-grid"><div class="card"><span>Total Orders</span><strong>${Number(dailyReport.totals?.totalOrders || 0)}</strong></div>
+          <div class="card"><span>Total Revenue</span><strong>${pdfCurrency(dailyReport.totals?.totalRevenue)}</strong></div>
+          <div class="card"><span>Timely Orders</span><strong>${Number(dailyReport.totals?.timelyCount || 0)}</strong></div></div>
+          <table><thead><tr><th>Category</th><th>Orders</th><th>Number of Sales</th><th>Sales Revenue</th></tr></thead><tbody>${categoryRows}</tbody></table>
+        </section>${dateSections}
+        <script>window.addEventListener('load', function () { setTimeout(function () { window.print(); }, 250); });<\/script>
+        </body></html>`;
+
+      printWindow.document.open();
+      printWindow.document.write(html);
+      printWindow.document.close();
+    } catch (error) {
+      printWindow.close();
+      alert(error.message || "Failed to prepare PDF report");
+    } finally {
+      setPdfLoading(false);
+    }
+  }
+
   const chartData = (report?.groups || []).map((g) => {
     const catMetrics =
       g.categoryMetrics && g.categoryMetrics[selectedCategory]
@@ -307,6 +429,13 @@ export default function AdminSalesReportPage() {
             className="inline-flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded"
           >
             <FiDownload /> Export CSV
+          </button>
+          <button
+            onClick={printPdfReport}
+            disabled={pdfLoading || !report}
+            className="inline-flex items-center gap-2 bg-cyan-600 hover:bg-cyan-700 disabled:cursor-not-allowed disabled:opacity-50 text-white px-3 py-2 rounded"
+          >
+            <FiDownload /> {pdfLoading ? "Preparing PDF..." : "Print / Save PDF"}
           </button>
         </div>
       </div>

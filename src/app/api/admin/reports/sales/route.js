@@ -347,6 +347,15 @@ export async function GET(req) {
             const timelyRate = totalOrders ? (timelyCount / totalOrders) * 100 : 0;
 
             const topItemsForBucket = productCountsArr.slice(0, 10);
+            const productsForBucket = productCountsArr.map(({ name, qty }) => {
+                const prod = productByName.get(String(name).toLowerCase());
+                return {
+                    name,
+                    category: prod?.category || "Uncategorized",
+                    qty,
+                    revenue: Number((bucket.productRevenue.get(name) || 0).toFixed(2)),
+                };
+            });
 
             // prepare categoryMetrics for response (includes All)
             const categoryMetricsForResponse = {};
@@ -375,6 +384,7 @@ export async function GET(req) {
                 timelyCount,
                 timelyRate: Number(timelyRate.toFixed(2)),
                 topItems: topItemsForBucket,
+                products: productsForBucket,
                 categoryMetrics: categoryMetricsForResponse,
             });
 
