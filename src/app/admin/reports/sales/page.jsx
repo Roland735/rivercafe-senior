@@ -249,6 +249,34 @@ export default function AdminSalesReportPage() {
           Number(product.totalInventory || 0),
         ])
       );
+      const overallProducts = new Map();
+      for (const group of dailyReport.groups || []) {
+        for (const product of group.products || []) {
+          const key = String(product.name || "").toLowerCase();
+          const current = overallProducts.get(key) || {
+            name: product.name,
+            category: product.category,
+            qty: 0,
+            revenue: 0,
+          };
+          current.qty += Number(product.qty || 0);
+          current.revenue += Number(product.revenue || 0);
+          overallProducts.set(key, current);
+        }
+      }
+      const overallProductList = Array.from(overallProducts.values()).sort(
+        (a, b) => b.qty - a.qty || String(a.name).localeCompare(String(b.name))
+      );
+      const overallProductRows = overallProductList
+        .map(
+          (product) =>
+            `<tr><td>${escapeHtml(product.name)}</td><td>${product.qty}</td><td>${escapeHtml(product.category)}</td><td>${pdfCurrency(product.revenue)}</td><td>${stockByProduct.get(String(product.name || "").toLowerCase()) ?? "-"}</td></tr>`
+        )
+        .join("");
+      const overallProductUnits = overallProductList.reduce(
+        (sum, product) => sum + product.qty,
+        0
+      );
 
       const dateSections = (dailyReport.groups || [])
         .map((group) => {
@@ -292,6 +320,9 @@ export default function AdminSalesReportPage() {
           thead th { background: #e2e8f0; font-size: 15px; }
           tfoot th { background: #cbd5e1; font-size: 16px; }
           .date-section { margin-top: 0; break-before: page; page-break-before: always; }
+          .overall-products { break-before: page; page-break-before: always; }
+          .overall-products td:nth-child(2), .overall-products td:nth-child(4), .overall-products td:nth-child(5),
+          .overall-products th:nth-child(2), .overall-products th:nth-child(4), .overall-products th:nth-child(5) { text-align: right; }
           .date-section td:nth-child(2), .date-section td:nth-child(4), .date-section td:nth-child(5),
           .date-section th:nth-child(2), .date-section th:nth-child(4), .date-section th:nth-child(5) { text-align: right; }
           .empty { padding: 24px; text-align: center !important; color: #64748b; }
@@ -303,6 +334,11 @@ export default function AdminSalesReportPage() {
           <div class="card"><span>Total Revenue</span><strong>${pdfCurrency(dailyReport.totals?.totalRevenue)}</strong></div>
           <div class="card"><span>Timely Orders</span><strong>${Number(dailyReport.totals?.timelyCount || 0)}</strong></div></div>
           <table><thead><tr><th>Category</th><th>Orders</th><th>Number of Sales</th><th>Sales Revenue</th></tr></thead><tbody>${categoryRows}</tbody></table>
+        </section>
+        <section class="overall-products"><h2>Overall Product Sales</h2>
+          <table><thead><tr><th>Product</th><th>Number of Sales</th><th>Category</th><th>Sales Revenue</th><th>Stock</th></tr></thead>
+          <tbody>${overallProductRows || '<tr><td colspan="5" class="empty">No product sales recorded</td></tr>'}</tbody>
+          <tfoot><tr><th>Total</th><th>${overallProductUnits}</th><th></th><th>${pdfCurrency(dailyReport.totals?.totalRevenue)}</th><th></th></tr></tfoot></table>
         </section>${dateSections}
         <script>window.addEventListener('load', function () { setTimeout(function () { window.print(); }, 250); });<\/script>
         </body></html>`;
