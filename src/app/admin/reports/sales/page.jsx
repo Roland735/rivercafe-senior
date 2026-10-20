@@ -132,24 +132,41 @@ export default function AdminSalesReportPage() {
 
     const productHeader = [
       "product",
-      "sku",
+      "numberOfSales",
       "category",
-      "unitsSold",
       "salesRevenue",
-      "unitPrice",
       "stock",
+      "unitPrice",
+      "sku",
       "inventoryValue",
     ];
     const productRows = (report.inventoryTotals?.perProduct || []).map((p) => [
       p.name,
-      p.sku,
-      p.category,
       p.unitsSold || 0,
+      p.category,
       p.salesRevenue || 0,
-      p.price || 0,
       p.totalInventory || 0,
+      p.price || 0,
+      p.sku,
       p.inventoryValue || 0,
     ]);
+    const categoryHeader = [
+      "category",
+      "orders",
+      "numberOfSales",
+      "salesRevenue",
+      "inventoryValue",
+    ];
+    const categoryRows = (report.categories || []).map((category) => {
+      const totals = report.byCategory?.[category] || {};
+      return [
+        category,
+        totals.totalOrders || 0,
+        totals.totalUnits || 0,
+        totals.totalRevenue || 0,
+        totals.inventoryValue || 0,
+      ];
+    });
     const csvRow = (row) =>
       row
         .map((cell) => `"${String(cell ?? "").replaceAll('"', '""')}"`)
@@ -160,9 +177,13 @@ export default function AdminSalesReportPage() {
       periodHeader,
       ...periodRows,
       [],
-      ["Product sales and current stock"],
+      ["Sales by product"],
       productHeader,
       ...productRows,
+      [],
+      ["Overall sales by category"],
+      categoryHeader,
+      ...categoryRows,
     ]
       .map(csvRow)
       .join("\n");
@@ -229,6 +250,10 @@ export default function AdminSalesReportPage() {
     (product) =>
       selectedCategory === "All" || product.category === selectedCategory
   );
+  const categorySummaryRows = (report?.categories || []).map((category) => ({
+    category,
+    ...(report.byCategory?.[category] || {}),
+  }));
 
   // Custom tooltip for dark UI (better contrast)
   const CustomTooltip = ({ active, payload, label }) => {
@@ -657,18 +682,18 @@ export default function AdminSalesReportPage() {
             {/* Product-level sales and current inventory */}
             <div className="bg-slate-900 p-3 rounded">
               <h3 className="text-sm text-slate-300 mb-2">
-                Product sales and current stock
+                Sales by product
               </h3>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="text-left text-slate-300">
                     <tr>
                       <th className="p-2">Product</th>
+                      <th className="p-2">Number of Sales</th>
                       <th className="p-2">Category</th>
-                      <th className="p-2">Units Sold</th>
                       <th className="p-2">Sales Revenue</th>
-                      <th className="p-2">Price</th>
                       <th className="p-2">Stock</th>
+                      <th className="p-2">Price</th>
                       <th className="p-2">Inventory Value</th>
                     </tr>
                   </thead>
@@ -679,20 +704,20 @@ export default function AdminSalesReportPage() {
                         className="border-t border-slate-700"
                       >
                         <td className="p-2 text-slate-100">{p.name}</td>
-                        <td className="p-2 text-slate-200">
-                          {p.category || "-"}
-                        </td>
                         <td className="p-2 text-slate-100">
                           {p.unitsSold || 0}
+                        </td>
+                        <td className="p-2 text-slate-200">
+                          {p.category || "-"}
                         </td>
                         <td className="p-2 text-slate-100">
                           {fmtCurrency(p.salesRevenue || 0)}
                         </td>
                         <td className="p-2 text-slate-100">
-                          {fmtCurrency(p.price)}
+                          {p.totalInventory}
                         </td>
                         <td className="p-2 text-slate-100">
-                          {p.totalInventory}
+                          {fmtCurrency(p.price)}
                         </td>
                         <td className="p-2 text-slate-100">
                           {fmtCurrency(p.inventoryValue)}
@@ -703,6 +728,54 @@ export default function AdminSalesReportPage() {
                       <tr>
                         <td colSpan="7" className="p-4 text-slate-500">
                           No product data for this category
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="bg-slate-900 p-3 rounded">
+              <h3 className="text-sm text-slate-300 mb-2">
+                Overall sales by category
+              </h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="text-left text-slate-300">
+                    <tr>
+                      <th className="p-2">Category</th>
+                      <th className="p-2">Orders</th>
+                      <th className="p-2">Number of Sales</th>
+                      <th className="p-2">Sales Revenue</th>
+                      <th className="p-2">Inventory Value</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {categorySummaryRows.map((row) => (
+                      <tr
+                        key={row.category}
+                        className="border-t border-slate-700"
+                      >
+                        <td className="p-2 text-slate-100">{row.category}</td>
+                        <td className="p-2 text-slate-100">
+                          {row.totalOrders || 0}
+                        </td>
+                        <td className="p-2 text-slate-100">
+                          {row.totalUnits || 0}
+                        </td>
+                        <td className="p-2 text-slate-100">
+                          {fmtCurrency(row.totalRevenue || 0)}
+                        </td>
+                        <td className="p-2 text-slate-100">
+                          {fmtCurrency(row.inventoryValue || 0)}
+                        </td>
+                      </tr>
+                    ))}
+                    {!categorySummaryRows.length && (
+                      <tr>
+                        <td colSpan="5" className="p-4 text-slate-500">
+                          No category sales data
                         </td>
                       </tr>
                     )}
