@@ -89,7 +89,7 @@ export default function AdminSalesReportPage() {
   function exportCsv() {
     if (!report) return alert("Generate report first");
 
-    const header = [
+    const periodHeader = [
       "category",
       "periodKey",
       "startDate",
@@ -102,7 +102,7 @@ export default function AdminSalesReportPage() {
       "topItems",
     ];
 
-    const rows = [];
+    const periodRows = [];
 
     const categories = ["All", ...(report.categories || [])];
     for (const cat of categories) {
@@ -111,7 +111,7 @@ export default function AdminSalesReportPage() {
           g.categoryMetrics && g.categoryMetrics[cat]
             ? g.categoryMetrics[cat]
             : { revenue: 0, orders: 0, units: 0, topItems: [] };
-        rows.push([
+        periodRows.push([
           cat,
           g.key,
           g.startDate,
@@ -130,10 +130,43 @@ export default function AdminSalesReportPage() {
       }
     }
 
-    const csv = [header, ...rows]
-      .map((r) => r.map((cell) => `"${String(cell ?? "")}"`).join(","))
+    const productHeader = [
+      "product",
+      "sku",
+      "category",
+      "unitsSold",
+      "salesRevenue",
+      "unitPrice",
+      "stock",
+      "inventoryValue",
+    ];
+    const productRows = (report.inventoryTotals?.perProduct || []).map((p) => [
+      p.name,
+      p.sku,
+      p.category,
+      p.unitsSold || 0,
+      p.salesRevenue || 0,
+      p.price || 0,
+      p.totalInventory || 0,
+      p.inventoryValue || 0,
+    ]);
+    const csvRow = (row) =>
+      row
+        .map((cell) => `"${String(cell ?? "").replaceAll('"', '""')}"`)
+        .join(",");
+    const csv = [
+      ["Sales report", `${report.from} to ${report.to}`],
+      [],
+      periodHeader,
+      ...periodRows,
+      [],
+      ["Product sales and current stock"],
+      productHeader,
+      ...productRows,
+    ]
+      .map(csvRow)
       .join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
+    const blob = new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -192,6 +225,10 @@ export default function AdminSalesReportPage() {
   }
 
   const rankedList = rankedProductsForSelected();
+  const visibleProductRows = (report?.inventoryTotals?.perProduct || []).filter(
+    (product) =>
+      selectedCategory === "All" || product.category === selectedCategory
+  );
 
   // Custom tooltip for dark UI (better contrast)
   const CustomTooltip = ({ active, payload, label }) => {
@@ -617,10 +654,10 @@ export default function AdminSalesReportPage() {
               </table>
             </div>
 
-            {/* small product inventory table */}
+            {/* Product-level sales and current inventory */}
             <div className="bg-slate-900 p-3 rounded">
               <h3 className="text-sm text-slate-300 mb-2">
-                Inventory valuation (per product)
+                Product sales and current stock
               </h3>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -628,13 +665,15 @@ export default function AdminSalesReportPage() {
                     <tr>
                       <th className="p-2">Product</th>
                       <th className="p-2">Category</th>
+                      <th className="p-2">Units Sold</th>
+                      <th className="p-2">Sales Revenue</th>
                       <th className="p-2">Price</th>
-                      <th className="p-2">Stock (total)</th>
+                      <th className="p-2">Stock</th>
                       <th className="p-2">Inventory Value</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {(report.inventoryTotals?.perProduct || []).map((p) => (
+                    {visibleProductRows.map((p) => (
                       <tr
                         key={p.productId}
                         className="border-t border-slate-700"
@@ -642,6 +681,12 @@ export default function AdminSalesReportPage() {
                         <td className="p-2 text-slate-100">{p.name}</td>
                         <td className="p-2 text-slate-200">
                           {p.category || "-"}
+                        </td>
+                        <td className="p-2 text-slate-100">
+                          {p.unitsSold || 0}
+                        </td>
+                        <td className="p-2 text-slate-100">
+                          {fmtCurrency(p.salesRevenue || 0)}
                         </td>
                         <td className="p-2 text-slate-100">
                           {fmtCurrency(p.price)}
@@ -654,10 +699,10 @@ export default function AdminSalesReportPage() {
                         </td>
                       </tr>
                     ))}
-                    {!report.inventoryTotals?.perProduct?.length && (
+                    {!visibleProductRows.length && (
                       <tr>
-                        <td colSpan="5" className="p-4 text-slate-500">
-                          No inventory data
+                        <td colSpan="7" className="p-4 text-slate-500">
+                          No product data for this category
                         </td>
                       </tr>
                     )}

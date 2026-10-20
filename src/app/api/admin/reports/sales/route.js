@@ -402,6 +402,8 @@ export async function GET(req) {
                         return 0;
                     });
                     const price = Number(p.price || 0);
+                    const unitsSold = Number(overallProductCounts.get(p.name) || 0);
+                    const salesRevenue = Number((overallProductRevenue.get(p.name) || 0).toFixed(2));
                     const inventoryValue = Number((price * (Number(totalInventory || 0))).toFixed(2));
                     return {
                         productId: String(p._id),
@@ -409,6 +411,8 @@ export async function GET(req) {
                         sku: p.sku || "",
                         price,
                         category: p.category || "Uncategorized",
+                        unitsSold,
+                        salesRevenue,
                         totalInventory: Number(totalInventory || 0),
                         inventoryValue,
                     };
@@ -420,6 +424,8 @@ export async function GET(req) {
                         sku: p.sku || "",
                         price: Number(p.price || 0),
                         category: p.category || "Uncategorized",
+                        unitsSold: Number(overallProductCounts.get(p.name) || 0),
+                        salesRevenue: Number((overallProductRevenue.get(p.name) || 0).toFixed(2)),
                         totalInventory: 0,
                         inventoryValue: 0,
                     };
