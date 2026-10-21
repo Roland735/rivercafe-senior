@@ -1,7 +1,7 @@
 export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
-import { connectToDatabase, Product, Inventory, AuditLog } from "@/models/allModels.js";
+import { connectToDatabase, Product, Inventory, AuditLog, StockEntry, StockAdjustment } from "@/models/allModels.js";
 import { getToken } from "next-auth/jwt";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 
@@ -95,6 +95,18 @@ export async function GET(req) {
             .populate({ path: "product", select: "name sku" })
             .lean();
 
+        const stockEntries = await StockEntry.find(productId ? { product: productId } : {})
+            .sort({ createdAt: -1 }).limit(500)
+            .populate({ path: "product", select: "name sku" })
+            .populate({ path: "recordedBy", select: "name email" })
+            .lean();
+        const stockAdjustments = await StockAdjustment.find(productId ? { product: productId } : {})
+            .sort({ occurredAt: -1 }).limit(500)
+            .populate({ path: "product", select: "name sku" })
+            .populate({ path: "inventory", select: "location" })
+            .populate({ path: "recordedBy", select: "name email" })
+            .lean();
+
         // compute totals for each product
         const totals = {};
         for (const r of invRows) {
@@ -113,7 +125,7 @@ export async function GET(req) {
         }));
 
         // return inventories and products
-        return NextResponse.json({ ok: true, products: productsWithTotals, inventories: invRows }, { status: 200 });
+        return NextResponse.json({ ok: true, products: productsWithTotals, inventories: invRows, stockEntries, stockAdjustments }, { status: 200 });
     } catch (err) {
         console.error("GET /api/admin/inventory error", err);
         return NextResponse.json({ ok: false, error: err.message || "Server error" }, { status: 500 });
@@ -131,9 +143,11 @@ export async function POST(req) {
         }
 
         const body = await req.json().catch(() => ({}));
-        const { productId, quantity = 0, location = "Main", lowStockThreshold = 0, active = true } = body || {};
+        const { productId, quantity = 0, location = "Main", lowStockThreshold = 0, note = "" } = body || {};
 
         if (!productId) return NextResponse.json({ ok: false, error: "Missing productId" }, { status: 400 });
+        const quantityAdded = Number(quantity);
+        if (!Number.isFinite(quantityAdded) || quantityAdded <= 0) return NextResponse.json({ ok: false, error: "Quantity added must be greater than zero" }, { status: 400 });
         // validate product exists
         const product = await Product.findById(productId).lean();
         if (!product) return NextResponse.json({ ok: false, error: "Product not found" }, { status: 404 });
@@ -144,12 +158,9 @@ export async function POST(req) {
         let saved;
         if (existing) {
             const beforeQuantity = Number(existing.quantity || 0);
-            const nextQuantity = Number(quantity);
+            const nextQuantity = beforeQuantity + quantityAdded;
             const metadata = existing.metadata || {};
-            existing.quantity = Number(quantity);
-            existing.lowStockThreshold = Number(lowStockThreshold || 0);
-            existing.active = active === false ? false : true;
-            existing.metadata = {
+            const nextMetadata = {
                 ...metadata,
                 previousQuantity: beforeQuantity,
                 lastStockChangeAt: new Date(),
@@ -163,27 +174,19 @@ export async function POST(req) {
                     }
                     : {}),
             };
-            saved = await existing.save();
-            // audit
-            try {
-                await AuditLog.create({
-                    actor: session.user.id || session.user.sub || null,
-                    action: "inventory_update",
-                    collectionName: "inventories",
-                    documentId: saved._id,
-                    changes: { before: { quantity: beforeQuantity }, after: { quantity: saved.quantity, location: saved.location, lowStockThreshold: saved.lowStockThreshold, active: saved.active } },
-                    meta: { productId },
-                });
-            } catch (e) { /* ignore audit errors */ }
+            saved = await Inventory.findByIdAndUpdate(existing._id, {
+                $inc: { quantity: quantityAdded },
+                $set: { metadata: nextMetadata, active: true },
+            }, { new: true });
         } else {
             // create one inventory row (auto-create when product has none)
-            const initialQuantity = Number(quantity);
+            const initialQuantity = quantityAdded;
             const doc = {
                 product: productId,
                 quantity: initialQuantity,
                 location: String(location || "").trim(),
                 lowStockThreshold: Number(lowStockThreshold || 0),
-                active: active === false ? false : true,
+                active: true,
                 metadata: {
                     previousQuantity: 0,
                     lastStockChangeAt: new Date(),
@@ -193,23 +196,39 @@ export async function POST(req) {
                 },
             };
             saved = await Inventory.create(doc);
-            // audit
-            try {
-                await AuditLog.create({
-                    actor: session.user.id || session.user.sub || null,
-                    action: "inventory_create",
-                    collectionName: "inventories",
-                    documentId: saved._id,
-                    changes: { before: null, after: { quantity: saved.quantity, location: saved.location, lowStockThreshold: saved.lowStockThreshold, active: saved.active } },
-                    meta: { productId },
-                });
-            } catch (e) { /* ignore audit errors */ }
         }
+
+        let stockEntry;
+        try {
+            const stockBefore = Number(saved.quantity) - quantityAdded;
+            stockEntry = await StockEntry.create({
+                inventory: saved._id,
+                product: saved.product,
+                quantityAdded,
+                location: saved.location || "Main",
+                stockBefore,
+                stockAfter: Number(saved.quantity),
+                recordedBy: session.user.id || session.user.sub,
+                note: String(note || "").trim(),
+            });
+        } catch (entryError) {
+            await Inventory.updateOne({ _id: saved._id }, { $inc: { quantity: -quantityAdded } }).catch(() => null);
+            throw entryError;
+        }
+
+        await AuditLog.create({
+            actor: session.user.id || session.user.sub || null,
+            action: "inventory_stock_add",
+            collectionName: "stockentries",
+            documentId: stockEntry._id,
+            changes: { quantityAdded, stockBefore: stockEntry.stockBefore, stockAfter: stockEntry.stockAfter },
+            meta: { productId, inventoryId: saved._id, location: saved.location, note: stockEntry.note },
+        }).catch(() => null);
 
         // populate product info
         const populated = await Inventory.findById(saved._id).populate({ path: "product", select: "name sku" }).lean();
 
-        return NextResponse.json({ ok: true, inventory: populated }, { status: 200 });
+        return NextResponse.json({ ok: true, inventory: populated, stockEntry }, { status: 201 });
     } catch (err) {
         console.error("POST /api/admin/inventory error", err);
         return NextResponse.json({ ok: false, error: err.message || "Server error" }, { status: 500 });
@@ -217,100 +236,9 @@ export async function POST(req) {
 }
 
 export async function PATCH(req) {
-    try {
-        await connectToDatabase();
-        const session = await getSessionLike(req);
-        const role = String(session?.user?.role || "").toLowerCase();
-        if (!session || !session.user || role !== "inventory") {
-            return NextResponse.json({ ok: false, error: "Not authorized" }, { status: 401 });
-        }
-
-        const body = await req.json().catch(() => ({}));
-        const { inventoryId, quantity, location, lowStockThreshold, active } = body || {};
-
-        if (!inventoryId) return NextResponse.json({ ok: false, error: "Missing inventoryId" }, { status: 400 });
-
-        const inv = await Inventory.findById(inventoryId);
-        if (!inv) return NextResponse.json({ ok: false, error: "Inventory row not found" }, { status: 404 });
-
-        const beforeQuantity = Number(inv.quantity || 0);
-        const beforeDetails = { quantity: beforeQuantity, location: inv.location, lowStockThreshold: inv.lowStockThreshold, active: inv.active };
-        if (quantity !== undefined) inv.quantity = Number(quantity);
-        if (location !== undefined) inv.location = String(location);
-        if (lowStockThreshold !== undefined) inv.lowStockThreshold = Number(lowStockThreshold);
-        if (active !== undefined) inv.active = !!active;
-        const nextQuantity = Number(inv.quantity || 0);
-        const metadata = inv.metadata || {};
-        inv.metadata = {
-            ...metadata,
-            previousQuantity: beforeQuantity,
-            lastStockChangeAt: new Date(),
-            ...(beforeQuantity > 0 && nextQuantity <= 0
-                ? { lastOutOfStockAt: new Date() }
-                : {}),
-            ...(beforeQuantity <= 0 && nextQuantity > 0
-                ? {
-                    lastRestockedAt: new Date(),
-                    restockedFromZeroCount: Number(metadata.restockedFromZeroCount || 0) + 1,
-                }
-                : {}),
-        };
-
-        const saved = await inv.save();
-
-        try {
-            await AuditLog.create({
-                actor: session.user.id || session.user.sub || null,
-                action: "inventory_update",
-                collectionName: "inventories",
-                documentId: saved._id,
-                changes: {
-                    before: beforeDetails,
-                    after: { quantity: saved.quantity, location: saved.location, lowStockThreshold: saved.lowStockThreshold, active: saved.active }
-                },
-                meta: { productId: saved.product?.toString ? saved.product.toString() : saved.product },
-            });
-        } catch (e) { /* ignore */ }
-
-        const populated = await Inventory.findById(saved._id).populate({ path: "product", select: "name sku" }).lean();
-        return NextResponse.json({ ok: true, inventory: populated }, { status: 200 });
-    } catch (err) {
-        console.error("PATCH /api/admin/inventory error", err);
-        return NextResponse.json({ ok: false, error: err.message || "Server error" }, { status: 500 });
-    }
+    return NextResponse.json({ ok: false, error: "Inventory is append-only. Record a stock addition or a documented loss." }, { status: 405 });
 }
 
 export async function DELETE(req) {
-    try {
-        await connectToDatabase();
-        const session = await getSessionLike(req);
-        const role = String(session?.user?.role || "").toLowerCase();
-        if (!session || !session.user || role !== "inventory") {
-            return NextResponse.json({ ok: false, error: "Not authorized" }, { status: 401 });
-        }
-
-        const body = await req.json().catch(() => ({}));
-        const { inventoryId } = body || {};
-        if (!inventoryId) return NextResponse.json({ ok: false, error: "Missing inventoryId" }, { status: 400 });
-
-        const inv = await Inventory.findById(inventoryId);
-        if (!inv) return NextResponse.json({ ok: false, error: "Inventory row not found" }, { status: 404 });
-
-        await Inventory.deleteOne({ _id: inventoryId });
-
-        try {
-            await AuditLog.create({
-                actor: session.user.id || session.user.sub || null,
-                action: "inventory_delete",
-                collectionName: "inventories",
-                documentId: inv._id,
-                changes: { deleted: true, product: inv.product?.toString ? inv.product.toString() : inv.product, quantity: inv.quantity, location: inv.location, lowStockThreshold: inv.lowStockThreshold, active: inv.active },
-            });
-        } catch (e) { /* ignore */ }
-
-        return NextResponse.json({ ok: true, deletedId: inventoryId }, { status: 200 });
-    } catch (err) {
-        console.error("DELETE /api/admin/inventory error", err);
-        return NextResponse.json({ ok: false, error: err.message || "Server error" }, { status: 500 });
-    }
+    return NextResponse.json({ ok: false, error: "Inventory records cannot be deleted." }, { status: 405 });
 }

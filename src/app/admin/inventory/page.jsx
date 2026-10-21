@@ -3,13 +3,13 @@
 
 import React, { useEffect, useState } from "react";
 import { useSession, signIn } from "next-auth/react";
-import { FiPlus, FiTrash2, FiEdit, FiDownload } from "react-icons/fi";
+import { FiPlus, FiDownload } from "react-icons/fi";
 
 /**
  * Admin Inventory Page
  * - Lists products and inventory rows
  * - Create inventory row for a product (auto-creates if none exists)
- * - Edit or delete existing inventory rows
+ * - Adds stock through append-only receiving entries
  * - Highlights rows red/green based on lowStockThreshold calibration (higher contrast)
  * - Exports inventory to Excel with one tab per location (and an "All" tab)
  *   - Each row in Excel includes Status (BUY / OK) and RecommendedOrder columns
@@ -31,6 +31,8 @@ export default function AdminInventoryPage() {
   const [loading, setLoading] = useState(false);
   const [products, setProducts] = useState([]);
   const [inventories, setInventories] = useState([]);
+  const [stockEntries, setStockEntries] = useState([]);
+  const [stockAdjustments, setStockAdjustments] = useState([]);
   const [form, setForm] = useState({
     productId: "",
     quantity: 0,
@@ -38,7 +40,6 @@ export default function AdminInventoryPage() {
     lowStockThreshold: 0,
     active: true,
   });
-  const [editing, setEditing] = useState(null);
   const [error, setError] = useState("");
 
   async function loadAll(productId = "") {
@@ -59,6 +60,8 @@ export default function AdminInventoryPage() {
       } else {
         setProducts(body.products || []);
         setInventories(body.inventories || []);
+        setStockEntries(body.stockEntries || []);
+        setStockAdjustments(body.stockAdjustments || []);
         // if product select empty, set to first product
         if (
           (!form.productId || form.productId === "") &&
@@ -176,86 +179,6 @@ export default function AdminInventoryPage() {
     }
   }
 
-  function startEdit(inv) {
-    setEditing(inv);
-    setForm({
-      productId: inv.product?._id
-        ? String(inv.product._id)
-        : String(inv.product || ""),
-      quantity: inv.quantity,
-      location: inv.location || "Main",
-      lowStockThreshold: inv.lowStockThreshold || 0,
-      active: !!inv.active,
-    });
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }
-
-  async function saveEdit(e) {
-    e?.preventDefault();
-    if (!editing) return setError("No inventory selected for editing");
-    setLoading(true);
-    setError("");
-    try {
-      const res = await fetch("/api/admin/inventory", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          inventoryId: editing._id || editing.id,
-          quantity: fmtNumber(form.quantity),
-          location: form.location,
-          lowStockThreshold: fmtNumber(form.lowStockThreshold),
-          active: !!form.active,
-        }),
-      });
-      const body = await res
-        .json()
-        .catch(() => ({ ok: false, error: "Invalid JSON" }));
-      if (!res.ok || !body.ok) {
-        setError(body?.error || `Failed (${res.status})`);
-      } else {
-        setEditing(null);
-        setForm((prev) => ({
-          ...prev,
-          quantity: 0,
-          location: "Main",
-          lowStockThreshold: 0,
-          active: true,
-        }));
-        await loadAll();
-      }
-    } catch (err) {
-      console.error(err);
-      setError("Network error while saving inventory.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function deleteRow(invId) {
-    if (!confirm("Delete this inventory row?")) return;
-    setLoading(true);
-    try {
-      const res = await fetch("/api/admin/inventory", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ inventoryId: invId }),
-      });
-      const body = await res
-        .json()
-        .catch(() => ({ ok: false, error: "Invalid JSON" }));
-      if (!res.ok || !body.ok) {
-        setError(body?.error || `Failed (${res.status})`);
-      } else {
-        await loadAll();
-      }
-    } catch (err) {
-      console.error(err);
-      setError("Network error while deleting inventory row.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
   // Excel export: builds a workbook with worksheets grouped by location and an "All" sheet.
   // Adds Status (BUY / OK) and RecommendedOrder columns to help decision-making.
   async function exportExcel() {
@@ -334,6 +257,32 @@ export default function AdminInventoryPage() {
         XLSX.utils.book_append_sheet(wb, ws, safeName);
       });
 
+      const entryRows = stockEntries.map((entry) => ({
+        Date: entry.createdAt ? new Date(entry.createdAt).toLocaleString() : "",
+        Product: entry.product?.name || "",
+        SKU: entry.product?.sku || "",
+        Location: entry.location || "Main",
+        QuantityAdded: entry.quantityAdded,
+        StockBefore: entry.stockBefore,
+        StockAfter: entry.stockAfter,
+        RecordedBy: entry.recordedBy?.name || entry.recordedBy?.email || "",
+        Note: entry.note || "",
+      }));
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(entryRows), "Stock Entries");
+      const lossRows = stockAdjustments.map((entry) => ({
+        Date: entry.occurredAt ? new Date(entry.occurredAt).toLocaleString() : "",
+        Product: entry.product?.name || "",
+        SKU: entry.product?.sku || "",
+        Location: entry.inventory?.location || "Main",
+        Reason: entry.reason,
+        QuantityRemoved: entry.quantity,
+        StockBefore: entry.stockBefore,
+        StockAfter: entry.stockAfter,
+        RecordedBy: entry.recordedBy?.name || entry.recordedBy?.email || "",
+        Note: entry.note || "",
+      }));
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(lossRows), "Losses");
+
       const filename = `inventory-${new Date()
         .toISOString()
         .slice(0, 19)
@@ -371,8 +320,8 @@ export default function AdminInventoryPage() {
               Inventory Management
             </h1>
             <p className="text-sm text-slate-400">
-              Create, edit or remove inventory rows. If a product has no
-              inventory rows, saving will create one automatically.
+              Record stock received. Existing balances cannot be edited or deleted;
+              corrections must be recorded under Expired / Losses.
             </p>
             <div className="mt-2 text-xs text-slate-200">
               <span className="inline-flex items-center mr-4">
@@ -404,7 +353,7 @@ export default function AdminInventoryPage() {
         </div>
 
         <form
-          onSubmit={editing ? saveEdit : submitForm}
+          onSubmit={submitForm}
           className="bg-slate-800 border border-slate-700 rounded-xl p-4 space-y-3"
         >
           <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
@@ -427,7 +376,7 @@ export default function AdminInventoryPage() {
             </div>
 
             <div>
-              <label className="text-xs text-slate-400">Quantity</label>
+              <label className="text-xs text-slate-400">Quantity received</label>
               <input
                 type="number"
                 value={form.quantity}
@@ -469,17 +418,6 @@ export default function AdminInventoryPage() {
               />
             </div>
 
-            <div className="flex items-end gap-2">
-              <label className="text-xs text-slate-400">Active</label>
-              <input
-                type="checkbox"
-                checked={form.active}
-                onChange={(e) =>
-                  setForm((prev) => ({ ...prev, active: e.target.checked }))
-                }
-                className="mt-1"
-              />
-            </div>
           </div>
 
           {error && (
@@ -495,26 +433,8 @@ export default function AdminInventoryPage() {
               className="inline-flex items-center gap-2 px-4 py-2 bg-cyan-600 rounded text-white"
             >
               <FiPlus />{" "}
-              {editing ? "Save changes" : "Create / Upsert inventory"}
+              Add stock
             </button>
-            {editing && (
-              <button
-                type="button"
-                onClick={() => {
-                  setEditing(null);
-                  setForm((prev) => ({
-                    ...prev,
-                    quantity: 0,
-                    location: "Main",
-                    lowStockThreshold: 0,
-                    active: true,
-                  }));
-                }}
-                className="px-4 py-2 rounded bg-slate-700 text-slate-200"
-              >
-                Cancel
-              </button>
-            )}
           </div>
         </form>
 
@@ -532,7 +452,6 @@ export default function AdminInventoryPage() {
                   <th className="p-2">Low threshold</th>
                   <th className="p-2">Active</th>
                   <th className="p-2">Updated</th>
-                  <th className="p-2">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -555,32 +474,29 @@ export default function AdminInventoryPage() {
                           inv.updatedAt || inv.createdAt
                         ).toLocaleString()}
                       </td>
-                      <td className="p-2">
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => startEdit(inv)}
-                            className="px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-slate-200 inline-flex items-center gap-1"
-                          >
-                            <FiEdit />
-                          </button>
-                          <button
-                            onClick={() => deleteRow(inv._id)}
-                            className="px-2 py-1 rounded bg-red-700 hover:bg-red-600 text-white inline-flex items-center gap-1"
-                          >
-                            <FiTrash2 />
-                          </button>
-                        </div>
-                      </td>
                     </tr>
                   );
                 })}
                 {!inventories.length && (
                   <tr>
-                    <td colSpan="7" className="p-4 text-slate-400">
+                    <td colSpan="6" className="p-4 text-slate-400">
                       No inventory rows found.
                     </td>
                   </tr>
                 )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="bg-slate-800 border border-slate-700 rounded-xl p-4">
+          <h2 className="text-lg text-slate-100 mb-3">Stock receiving history ({stockEntries.length})</h2>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead><tr className="bg-slate-700 text-left"><th className="p-2">Date</th><th className="p-2">Product</th><th className="p-2">Location</th><th className="p-2">Added</th><th className="p-2">Before → After</th><th className="p-2">Recorded by</th></tr></thead>
+              <tbody>
+                {stockEntries.map((entry) => <tr key={entry._id} className="border-t border-slate-700"><td className="p-2">{new Date(entry.createdAt).toLocaleString()}</td><td className="p-2">{entry.product?.name || ""}</td><td className="p-2">{entry.location || "Main"}</td><td className="p-2 text-emerald-300">+{entry.quantityAdded}</td><td className="p-2">{entry.stockBefore} → {entry.stockAfter}</td><td className="p-2">{entry.recordedBy?.name || entry.recordedBy?.email || "Inventory user"}</td></tr>)}
+                {!stockEntries.length && <tr><td colSpan="6" className="p-4 text-slate-400">No stock entries recorded yet.</td></tr>}
               </tbody>
             </table>
           </div>

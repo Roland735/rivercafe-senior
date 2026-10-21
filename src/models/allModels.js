@@ -327,6 +327,17 @@ const StockAdjustmentSchema = new mongoose.Schema({
     stockAfter: { type: Number, required: true }
 }, { timestamps: true });
 
+const StockEntrySchema = new mongoose.Schema({
+    inventory: { type: mongoose.Schema.Types.ObjectId, ref: 'Inventory', required: true, index: true },
+    product: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true, index: true },
+    quantityAdded: { type: Number, required: true, min: 0.01 },
+    location: { type: String, required: true },
+    stockBefore: { type: Number, required: true },
+    stockAfter: { type: Number, required: true },
+    recordedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    note: { type: String, trim: true }
+}, { timestamps: true });
+
 /* Convenience static: get total available quantity for a product */
 InventorySchema.statics.getTotalForProduct = async function (productId) {
     const docs = await this.find({ product: productId, active: true }).select('quantity').lean();
@@ -472,6 +483,7 @@ export const Setting = mongoose.models.Setting || mongoose.model('Setting', Sett
 export const Notification = mongoose.models.Notification || mongoose.model('Notification', NotificationSchema);
 export const Inventory = mongoose.models.Inventory || mongoose.model('Inventory', InventorySchema);
 export const StockAdjustment = mongoose.models.StockAdjustment || mongoose.model('StockAdjustment', StockAdjustmentSchema);
+export const StockEntry = mongoose.models.StockEntry || mongoose.model('StockEntry', StockEntrySchema);
 
 /* ---------------------------
    Convenience: atomic top-up and place-order helpers
@@ -1063,6 +1075,7 @@ const Models = {
     Notification,
     Inventory,
     StockAdjustment,
+    StockEntry,
     topUpUserAtomic,
     placeOrderAtomic
 };
