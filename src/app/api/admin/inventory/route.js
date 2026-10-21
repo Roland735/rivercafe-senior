@@ -44,7 +44,7 @@ export async function GET(req) {
         await connectToDatabase();
         const session = await getSessionLike(req);
         const role = String(session?.user?.role || "").toLowerCase();
-        if (!session || !session.user || !["admin", "inventory"].includes(role)) {
+        if (!session || !session.user || role !== "inventory") {
             return NextResponse.json({ ok: false, error: "Not authorized" }, { status: 401 });
         }
 
@@ -126,7 +126,7 @@ export async function POST(req) {
         await connectToDatabase();
         const session = await getSessionLike(req);
         const role = String(session?.user?.role || "").toLowerCase();
-        if (!session || !session.user || !["admin", "inventory"].includes(role)) {
+        if (!session || !session.user || role !== "inventory") {
             return NextResponse.json({ ok: false, error: "Not authorized" }, { status: 401 });
         }
 
@@ -171,7 +171,7 @@ export async function POST(req) {
                     action: "inventory_update",
                     collectionName: "inventories",
                     documentId: saved._id,
-                    changes: { quantity: saved.quantity, location: saved.location, lowStockThreshold: saved.lowStockThreshold },
+                    changes: { before: { quantity: beforeQuantity }, after: { quantity: saved.quantity, location: saved.location, lowStockThreshold: saved.lowStockThreshold, active: saved.active } },
                     meta: { productId },
                 });
             } catch (e) { /* ignore audit errors */ }
@@ -200,7 +200,7 @@ export async function POST(req) {
                     action: "inventory_create",
                     collectionName: "inventories",
                     documentId: saved._id,
-                    changes: { quantity: saved.quantity, location: saved.location, lowStockThreshold: saved.lowStockThreshold },
+                    changes: { before: null, after: { quantity: saved.quantity, location: saved.location, lowStockThreshold: saved.lowStockThreshold, active: saved.active } },
                     meta: { productId },
                 });
             } catch (e) { /* ignore audit errors */ }
@@ -221,7 +221,7 @@ export async function PATCH(req) {
         await connectToDatabase();
         const session = await getSessionLike(req);
         const role = String(session?.user?.role || "").toLowerCase();
-        if (!session || !session.user || !["admin", "inventory"].includes(role)) {
+        if (!session || !session.user || role !== "inventory") {
             return NextResponse.json({ ok: false, error: "Not authorized" }, { status: 401 });
         }
 
@@ -234,6 +234,7 @@ export async function PATCH(req) {
         if (!inv) return NextResponse.json({ ok: false, error: "Inventory row not found" }, { status: 404 });
 
         const beforeQuantity = Number(inv.quantity || 0);
+        const beforeDetails = { quantity: beforeQuantity, location: inv.location, lowStockThreshold: inv.lowStockThreshold, active: inv.active };
         if (quantity !== undefined) inv.quantity = Number(quantity);
         if (location !== undefined) inv.location = String(location);
         if (lowStockThreshold !== undefined) inv.lowStockThreshold = Number(lowStockThreshold);
@@ -263,7 +264,10 @@ export async function PATCH(req) {
                 action: "inventory_update",
                 collectionName: "inventories",
                 documentId: saved._id,
-                changes: { quantity: saved.quantity, location: saved.location, lowStockThreshold: saved.lowStockThreshold, active: saved.active },
+                changes: {
+                    before: beforeDetails,
+                    after: { quantity: saved.quantity, location: saved.location, lowStockThreshold: saved.lowStockThreshold, active: saved.active }
+                },
                 meta: { productId: saved.product?.toString ? saved.product.toString() : saved.product },
             });
         } catch (e) { /* ignore */ }
@@ -281,7 +285,7 @@ export async function DELETE(req) {
         await connectToDatabase();
         const session = await getSessionLike(req);
         const role = String(session?.user?.role || "").toLowerCase();
-        if (!session || !session.user || !["admin", "inventory"].includes(role)) {
+        if (!session || !session.user || role !== "inventory") {
             return NextResponse.json({ ok: false, error: "Not authorized" }, { status: 401 });
         }
 
@@ -300,7 +304,7 @@ export async function DELETE(req) {
                 action: "inventory_delete",
                 collectionName: "inventories",
                 documentId: inv._id,
-                changes: { deleted: true, product: inv.product?.toString ? inv.product.toString() : inv.product, location: inv.location },
+                changes: { deleted: true, product: inv.product?.toString ? inv.product.toString() : inv.product, quantity: inv.quantity, location: inv.location, lowStockThreshold: inv.lowStockThreshold, active: inv.active },
             });
         } catch (e) { /* ignore */ }
 

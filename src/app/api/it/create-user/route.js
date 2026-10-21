@@ -14,7 +14,7 @@ const SALT_ROUNDS = 10;
  *   name: string (required),
  *   email?: string,
  *   regNumber?: string,   // required for student
- *   role?: 'student'|'admin'|'it'|'canteen'|'external',
+ *   role?: 'student'|'admin'|'it'|'canteen'|'inventory'|'external',
  *   isActive?: boolean
  * }
  *

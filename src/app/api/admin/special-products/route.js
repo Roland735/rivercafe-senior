@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { connectToDatabase, SpecialProduct, SpecialOrderingWindow, AuditLog } from '../../../../models/allModels.js';
+import { hasRole } from '@/lib/serverRole';
 
 export async function GET(req) {
     try {
@@ -32,6 +33,8 @@ export async function GET(req) {
 
 export async function POST(req) {
     try {
+        const actor = await hasRole(req, ['inventory']);
+        if (!actor) return NextResponse.json({ ok: false, error: 'Inventory access required' }, { status: 403 });
         await connectToDatabase();
         const body = await req.json();
 
@@ -78,7 +81,7 @@ export async function POST(req) {
 
         try {
             await AuditLog.create({
-                actor: body._actor || null,
+                actor: actor.id || actor.sub || null,
                 action: 'special_menu_create',
                 collectionName: 'specialproducts',
                 documentId: doc._id,

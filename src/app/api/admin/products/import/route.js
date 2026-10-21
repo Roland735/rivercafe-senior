@@ -1,6 +1,7 @@
 // app/api/admin/products/import/route.js
 import { NextResponse } from 'next/server';
 import { connectToDatabase, Product, AuditLog } from '@/models/allModels';
+import { hasRole } from '@/lib/serverRole';
 
 /**
  * Accepts:
@@ -25,6 +26,8 @@ function parseCSV(csvText) {
 
 export async function POST(req) {
     try {
+        const actor = await hasRole(req, ['inventory']);
+        if (!actor) return NextResponse.json({ ok: false, error: 'Inventory access required' }, { status: 403 });
         await connectToDatabase();
 
         const contentType = (req.headers.get('content-type') || '').toLowerCase();
@@ -75,7 +78,7 @@ export async function POST(req) {
         // Audit log for bulk import
         try {
             await AuditLog.create({
-                actor: null,
+                actor: actor.id || actor.sub || null,
                 action: 'menu_bulk_import',
                 collectionName: 'products',
                 documentId: null,

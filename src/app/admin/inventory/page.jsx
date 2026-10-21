@@ -111,7 +111,7 @@ export default function AdminInventoryPage() {
     );
   }
 
-  if (status === "authenticated" && !["admin", "inventory"].includes(role)) {
+  if (status === "authenticated" && role !== "inventory") {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
         <div className="max-w-md w-full bg-gradient-to-b from-slate-800 to-slate-900 border border-slate-700 rounded-xl p-8 text-center">

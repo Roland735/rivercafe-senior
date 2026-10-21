@@ -14,6 +14,7 @@ import {
   FiChevronLeft,
   FiLogOut,
   FiMenu,
+  FiAlertTriangle,
 } from "react-icons/fi";
 import { useState, useEffect } from "react";
 import { signOut, useSession } from "next-auth/react";
@@ -48,6 +49,7 @@ export default function Sidebar({ isCollapsed, toggleSidebar, onItemClick }) {
     { href: "/admin/accounting", label: "Accounting", icon: <FiBarChart /> },
     { href: "/admin/reports/sales", label: "Sales", icon: <FiBarChart /> },
     { href: "/admin/inventory", label: "Inventory", icon: <FiBarChart /> },
+    { href: "/admin/stock-adjustments", label: "Expired / Losses", icon: <FiAlertTriangle /> },
     {
       href: "/admin/external-order",
       label: "External Order",
@@ -66,8 +68,8 @@ export default function Sidebar({ isCollapsed, toggleSidebar, onItemClick }) {
   ];
   const visibleItems =
     role === "inventory"
-      ? items.filter((it) => it.href === "/admin/inventory")
-      : items;
+      ? items.filter((it) => ["/admin/inventory", "/admin/stock-adjustments", "/admin/menu", "/admin/reset-password"].includes(it.href))
+      : items.filter((it) => !["/admin/inventory", "/admin/stock-adjustments", "/admin/menu"].includes(it.href));
 
   return (
     <>

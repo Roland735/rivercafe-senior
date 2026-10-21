@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import mongoose from 'mongoose';
 import { AuditLog, connectToDatabase, SpecialProduct } from '@/models/allModels';
+import { hasRole } from '@/lib/serverRole';
 
 export async function GET(req, { params }) {
     try {
@@ -19,6 +20,8 @@ export async function GET(req, { params }) {
 
 export async function PUT(req, { params }) {
     try {
+        const actor = await hasRole(req, ['inventory']);
+        if (!actor) return NextResponse.json({ ok: false, error: 'Inventory access required' }, { status: 403 });
         await connectToDatabase();
         const { id } = params;
         if (!mongoose.Types.ObjectId.isValid(id)) return NextResponse.json({ ok: false, error: 'Invalid id' }, { status: 400 });
@@ -38,7 +41,7 @@ export async function PUT(req, { params }) {
 
         try {
             await AuditLog.create({
-                actor: body._actor || null,
+                actor: actor.id || actor.sub || null,
                 action: 'special_menu_update',
                 collectionName: 'specialproducts',
                 documentId: id,
@@ -56,6 +59,8 @@ export async function PUT(req, { params }) {
 
 export async function DELETE(req, { params }) {
     try {
+        const actor = await hasRole(req, ['inventory']);
+        if (!actor) return NextResponse.json({ ok: false, error: 'Inventory access required' }, { status: 403 });
         await connectToDatabase();
         const { id } = params;
         if (!mongoose.Types.ObjectId.isValid(id)) return NextResponse.json({ ok: false, error: 'Invalid id' }, { status: 400 });
@@ -65,7 +70,7 @@ export async function DELETE(req, { params }) {
 
         try {
             await AuditLog.create({
-                actor: null,
+                actor: actor.id || actor.sub || null,
                 action: 'special_menu_delete',
                 collectionName: 'specialproducts',
                 documentId: id,

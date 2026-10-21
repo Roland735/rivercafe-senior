@@ -42,8 +42,15 @@ export default function ClientAdminLayout({ children }) {
         }
 
         if (role === 'inventory') {
-            const ok = pathname === '/admin/inventory' || pathname.startsWith('/admin/inventory/');
+            const allowed = ['/admin/inventory', '/admin/stock-adjustments', '/admin/menu', '/admin/reset-password'];
+            const ok = allowed.some((path) => pathname === path || pathname.startsWith(path + '/'));
             if (!ok) router.replace('/admin/inventory');
+            return;
+        }
+
+        if (role === 'admin' && ['/admin/inventory', '/admin/stock-adjustments', '/admin/menu']
+            .some((path) => pathname === path || pathname.startsWith(path + '/'))) {
+            router.replace('/admin');
             return;
         }
 
@@ -58,9 +65,11 @@ export default function ClientAdminLayout({ children }) {
 
     const canRender =
         status === 'authenticated' &&
-        (role === 'admin' ||
+        ((role === 'admin' && !['/admin/inventory', '/admin/stock-adjustments', '/admin/menu']
+            .some((path) => pathname === path || pathname.startsWith(path + '/'))) ||
             (role === 'inventory' &&
-                (pathname === '/admin/inventory' || pathname.startsWith('/admin/inventory/'))));
+                ['/admin/inventory', '/admin/stock-adjustments', '/admin/menu', '/admin/reset-password']
+                    .some((path) => pathname === path || pathname.startsWith(path + '/'))));
 
     if (!canRender) {
         return (
@@ -87,7 +96,7 @@ export default function ClientAdminLayout({ children }) {
                 <header className="sticky top-0 z-40 flex items-center justify-between px-4 sm:px-6 py-3 border-b border-slate-800 bg-slate-900/95 backdrop-blur-md">
                     <div className="flex items-center">
                         <div>
-                            <h1 className="text-xl font-semibold text-slate-100">Admin Dashboard</h1>
+                            <h1 className="text-xl font-semibold text-slate-100">{role === 'inventory' ? 'Inventory Console' : 'Admin Dashboard'}</h1>
                             <p className="text-xs text-red-600">Aspire <span className='text-slate-50'>|</span> Achieve <span className='text-slate-50'>|</span> Succeed</p>
                         </div>
                     </div>

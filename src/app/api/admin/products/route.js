@@ -1,6 +1,7 @@
 // app/api/admin/products/route.js
 import { NextResponse } from 'next/server';
 import { connectToDatabase, Product, AuditLog, Inventory } from '../../../../models/allModels.js';
+import { hasRole } from '@/lib/serverRole';
 
 /**
  * GET: list products (query params: search, category, available)
@@ -55,6 +56,8 @@ export async function GET(req) {
 
 export async function POST(req) {
     try {
+        const actor = await hasRole(req, ['inventory']);
+        if (!actor) return NextResponse.json({ ok: false, error: 'Inventory access required' }, { status: 403 });
         await connectToDatabase();
         const body = await req.json();
 
@@ -82,7 +85,7 @@ export async function POST(req) {
         // Audit log (actor should be set to admin user id — integrate session to populate).
         try {
             await AuditLog.create({
-                actor: body._actor || null,
+                actor: actor.id || actor.sub || null,
                 action: 'menu_create',
                 collectionName: 'products',
                 documentId: doc._id,

@@ -734,6 +734,7 @@ export default function ITHomePage() {
                             <option value="admin">Admin</option>
                             <option value="it">IT</option>
                             <option value="canteen">Canteen Operator</option>
+                            <option value="inventory">Inventory Officer</option>
                             <option value="external">External (cash)</option>
                         </select>
                         <div className="text-xs text-slate-500 mt-1">Choose role — password behavior depends on role.</div>
