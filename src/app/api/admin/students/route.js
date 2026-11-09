@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { connectToDatabase, User } from '@/models/allModels';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
+import bcrypt from 'bcrypt';
+import { AuditLog } from '@/models/allModels';
 
 export async function GET(req) {
     try {
@@ -85,5 +87,67 @@ export async function GET(req) {
     } catch (err) {
         console.error('GET /api/admin/students error', err);
         return NextResponse.json({ ok: false, error: err.message }, { status: 500 });
+    }
+}
+
+async function authorizeStudentManagement() {
+    const session = await getServerSession(authOptions);
+    return session && ['admin', 'it'].includes(session.user?.role || '') ? session : null;
+}
+
+export async function PATCH(req) {
+    try {
+        const session = await authorizeStudentManagement();
+        if (!session) return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
+        const { id, regNumber: inputRegNumber } = await req.json();
+        const regNumber = String(inputRegNumber || '').trim();
+        if (!id || !regNumber) return NextResponse.json({ ok: false, error: 'Student and R number are required' }, { status: 400 });
+
+        await connectToDatabase();
+        const student = await User.findOne({ _id: id, role: 'student' });
+        if (!student) return NextResponse.json({ ok: false, error: 'Student not found' }, { status: 404 });
+        const escapedRegNumber = regNumber.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const conflict = await User.findOne({ regNumber: new RegExp(`^${escapedRegNumber}$`, 'i'), _id: { $ne: student._id } }).select('_id').lean();
+        if (conflict) return NextResponse.json({ ok: false, error: 'That R number is already in use' }, { status: 409 });
+
+        const previousRegNumber = student.regNumber;
+        if (previousRegNumber !== regNumber) {
+            student.regNumber = regNumber;
+            student.passwordHash = await bcrypt.hash(regNumber, 10);
+            student.requirePasswordReset = true;
+            await student.save();
+            try {
+                await AuditLog.create({ actor: session.user.id || null, action: 'student_reg_number_updated', collectionName: 'users', documentId: student._id, changes: { regNumber: { from: previousRegNumber, to: regNumber } } });
+            } catch (auditError) {
+                console.warn('Student R number audit failed:', auditError?.message || auditError);
+            }
+        }
+        return NextResponse.json({ ok: true, student: { _id: student._id, regNumber: student.regNumber } });
+    } catch (err) {
+        if (err?.code === 11000) return NextResponse.json({ ok: false, error: 'That R number is already in use' }, { status: 409 });
+        console.error('PATCH /api/admin/students error', err);
+        return NextResponse.json({ ok: false, error: 'Unable to update student' }, { status: 500 });
+    }
+}
+
+export async function DELETE(req) {
+    try {
+        const session = await authorizeStudentManagement();
+        if (!session) return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
+        const { id } = await req.json();
+        if (!id) return NextResponse.json({ ok: false, error: 'Student id is required' }, { status: 400 });
+
+        await connectToDatabase();
+        const student = await User.findOneAndDelete({ _id: id, role: 'student' }).lean();
+        if (!student) return NextResponse.json({ ok: false, error: 'Student not found' }, { status: 404 });
+        try {
+            await AuditLog.create({ actor: session.user.id || null, action: 'student_deleted', collectionName: 'users', documentId: student._id, changes: { name: student.name, regNumber: student.regNumber } });
+        } catch (auditError) {
+            console.warn('Student deletion audit failed:', auditError?.message || auditError);
+        }
+        return NextResponse.json({ ok: true });
+    } catch (err) {
+        console.error('DELETE /api/admin/students error', err);
+        return NextResponse.json({ ok: false, error: 'Unable to delete student' }, { status: 500 });
     }
 }

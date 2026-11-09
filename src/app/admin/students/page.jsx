@@ -27,6 +27,9 @@ export default function AdminStudentsPage() {
   const [selectedStudent, setSelectedStudent] = useState(null); // for modal
   const [statement, setStatement] = useState(null); // statement data
   const [loadingStatement, setLoadingStatement] = useState(false);
+  const [editingRegStudent, setEditingRegStudent] = useState(null);
+  const [regNumberDraft, setRegNumberDraft] = useState("");
+  const [savingRegNumber, setSavingRegNumber] = useState(false);
 
   // Edit Order State
   const [editingOrder, setEditingOrder] = useState(null);
@@ -64,6 +67,44 @@ export default function AdminStudentsPage() {
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function saveRegNumber() {
+    if (!editingRegStudent || !regNumberDraft.trim()) return;
+    setSavingRegNumber(true);
+    try {
+      const res = await fetch("/api/admin/students", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: editingRegStudent._id, regNumber: regNumberDraft.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || "Could not update R number");
+      setEditingRegStudent(null);
+      await fetchStudents();
+      alert("R number updated. The student will use it as their temporary password and be asked to change it.");
+    } catch (err) {
+      alert(err.message || "Could not update R number");
+    } finally {
+      setSavingRegNumber(false);
+    }
+  }
+
+  async function deleteStudent(student) {
+    if (!confirm(`Permanently delete ${student.name} (${student.regNumber || "no R number"})? This cannot be undone.`)) return;
+    try {
+      const res = await fetch("/api/admin/students", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: student._id }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || "Could not delete student");
+      if (students.length === 1 && page > 1) setPage((current) => current - 1);
+      else await fetchStudents();
+    } catch (err) {
+      alert(err.message || "Could not delete student");
     }
   }
 
@@ -480,12 +521,30 @@ export default function AdminStudentsPage() {
                         {fmt(s.balance)}
                       </td>
                       <td className="p-4 text-center">
-                        <button
-                          onClick={() => handleViewStatement(s)}
-                          className="px-3 py-1 bg-cyan-900/30 text-cyan-400 rounded hover:bg-cyan-900/50 transition-colors text-xs flex items-center gap-1 mx-auto"
-                        >
-                          <FiFileText /> Statement
-                        </button>
+                        <div className="flex justify-center gap-2">
+                          <button
+                            onClick={() => handleViewStatement(s)}
+                            className="px-3 py-1 bg-cyan-900/30 text-cyan-400 rounded hover:bg-cyan-900/50 transition-colors text-xs flex items-center gap-1"
+                          >
+                            <FiFileText /> Statement
+                          </button>
+                          <button
+                            onClick={() => { setEditingRegStudent(s); setRegNumberDraft(s.regNumber || ""); }}
+                            className="p-2 text-amber-300 hover:bg-amber-900/30 rounded transition-colors"
+                            title="Edit R number"
+                            aria-label={`Edit R number for ${s.name}`}
+                          >
+                            <FiEdit size={15} />
+                          </button>
+                          <button
+                            onClick={() => deleteStudent(s)}
+                            className="p-2 text-red-400 hover:bg-red-900/30 rounded transition-colors"
+                            title="Delete student"
+                            aria-label={`Delete ${s.name}`}
+                          >
+                            <FiTrash2 size={15} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -520,6 +579,38 @@ export default function AdminStudentsPage() {
       </div>
 
       {/* Popup Modal */}
+      {editingRegStudent && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <form
+            onSubmit={(event) => { event.preventDefault(); saveRegNumber(); }}
+            className="w-full max-w-md space-y-4 rounded-xl border border-slate-700 bg-slate-800 p-6 shadow-2xl"
+          >
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-bold">Edit R number</h2>
+              <button type="button" onClick={() => setEditingRegStudent(null)} className="rounded p-2 text-slate-400 hover:bg-slate-700" aria-label="Close">
+                <FiX />
+              </button>
+            </div>
+            <p className="text-sm text-slate-400">{editingRegStudent.name}</p>
+            <input
+              autoFocus
+              required
+              value={regNumberDraft}
+              onChange={(event) => setRegNumberDraft(event.target.value)}
+              placeholder="R number"
+              className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-slate-100 focus:border-cyan-500 focus:outline-none"
+            />
+            <p className="text-xs text-slate-500">Their password will be reset to the new R number, and they will be asked to choose a new password.</p>
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setEditingRegStudent(null)} className="rounded-lg px-4 py-2 text-slate-300 hover:bg-slate-700">Cancel</button>
+              <button type="submit" disabled={savingRegNumber || !regNumberDraft.trim()} className="flex items-center gap-2 rounded-lg bg-cyan-600 px-4 py-2 font-medium text-white hover:bg-cyan-500 disabled:opacity-50">
+                <FiSave /> {savingRegNumber ? "Saving..." : "Save R number"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {selectedStudent && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
           <div className="bg-slate-800 rounded-xl border border-slate-700 w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl">
