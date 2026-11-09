@@ -14,6 +14,9 @@ import {
     FiDownload,
     FiClipboard,
     FiPlus,
+    FiEdit,
+    FiTrash2,
+    FiSave,
 } from 'react-icons/fi';
 
 /**
@@ -70,6 +73,9 @@ export default function ITHomePage() {
 
     // per-user action loading (activate/deactivate)
     const [actionLoadingId, setActionLoadingId] = useState(null);
+    const [editingStudent, setEditingStudent] = useState(null);
+    const [editRegNumber, setEditRegNumber] = useState('');
+    const [savingStudent, setSavingStudent] = useState(false);
 
     // Reset password modal state
     const [isResetOpen, setIsResetOpen] = useState(false);
@@ -321,6 +327,47 @@ export default function ITHomePage() {
         }
     }
 
+    async function saveStudentRegNumber() {
+        if (!editingStudent || !editRegNumber.trim()) return;
+        setSavingStudent(true);
+        try {
+            const res = await fetch('/api/admin/students', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: editingStudent._id, regNumber: editRegNumber.trim() }),
+            });
+            const body = await res.json();
+            if (!res.ok || !body.ok) throw new Error(body.error || 'Could not update R number');
+            setEditingStudent(null);
+            setEditRegNumber('');
+            setRefreshKey((key) => key + 1);
+            alert('R number updated. The student will use it as their temporary password and be asked to change it.');
+        } catch (err) {
+            alert(err.message || 'Could not update R number');
+        } finally {
+            setSavingStudent(false);
+        }
+    }
+
+    async function deleteStudent(student) {
+        if (!confirm(`Permanently delete ${student.name} (${student.regNumber || 'no R number'})? This cannot be undone.`)) return;
+        setActionLoadingId(student._id);
+        try {
+            const res = await fetch('/api/admin/students', {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: student._id }),
+            });
+            const body = await res.json();
+            if (!res.ok || !body.ok) throw new Error(body.error || 'Could not delete student');
+            setRefreshKey((key) => key + 1);
+        } catch (err) {
+            alert(err.message || 'Could not delete student');
+        } finally {
+            setActionLoadingId(null);
+        }
+    }
+
     // ---------- Download CSV template (client-side) ----------
     function downloadTemplate() {
         const header = ['name', 'email', 'role', 'regNumber'];
@@ -535,6 +582,7 @@ export default function ITHomePage() {
                                     <div className="min-w-0">
                                         <div className="text-slate-100 font-medium truncate">{u.name || u.email || 'Unknown'}</div>
                                         <div className="text-xs text-slate-300 truncate">{u.email || u.regNumber || '—'}</div>
+                                        {u.role === 'student' && u.regNumber && <div className="text-xs text-slate-300 mt-1">R number: <span className="font-mono">{u.regNumber}</span></div>}
                                         <div className="text-xs text-slate-400 mt-2">
                                             Role: <span className="font-medium text-slate-100">{u.role}</span>
                                         </div>
@@ -555,6 +603,18 @@ export default function ITHomePage() {
                                 <div className="mt-3 text-xs text-slate-400">Joined: {humanDate(u.createdAt)}</div>
 
                                 <div className="mt-3 flex gap-2">
+                                    {u.role === 'student' && <>
+                                        <button
+                                            onClick={() => { setEditingStudent(u); setEditRegNumber(u.regNumber || ''); }}
+                                            className="px-2 py-1 rounded bg-cyan-700 text-white text-sm inline-flex items-center gap-2"
+                                            disabled={actionLoadingId === u._id}
+                                        ><FiEdit /> Edit R number</button>
+                                        <button
+                                            onClick={() => deleteStudent(u)}
+                                            className="px-2 py-1 rounded bg-red-900 text-red-100 text-sm inline-flex items-center gap-2"
+                                            disabled={actionLoadingId === u._id}
+                                        ><FiTrash2 /> Delete</button>
+                                    </>}
                                     <button
                                         onClick={() => { setResetIdentifier(u.email || u.regNumber || ''); setIsResetOpen(true); }}
                                         className="px-2 py-1 rounded bg-amber-500 text-black text-sm inline-flex items-center gap-2"
@@ -586,6 +646,22 @@ export default function ITHomePage() {
                     </div>
                 )}
             </div>
+
+            <Modal
+                open={!!editingStudent}
+                title="Edit student R number"
+                onClose={() => { if (!savingStudent) { setEditingStudent(null); setEditRegNumber(''); } }}
+                footer={<div className="flex justify-end gap-2">
+                    <button onClick={() => { setEditingStudent(null); setEditRegNumber(''); }} disabled={savingStudent} className="px-3 py-2 rounded bg-slate-700 text-slate-200">Cancel</button>
+                    <button onClick={saveStudentRegNumber} disabled={savingStudent || !editRegNumber.trim()} className="px-3 py-2 rounded bg-cyan-600 text-white inline-flex items-center gap-2"><FiSave /> {savingStudent ? 'Saving...' : 'Save R number'}</button>
+                </div>}
+            >
+                <div className="space-y-2">
+                    <p className="text-sm text-slate-300">{editingStudent?.name}</p>
+                    <input value={editRegNumber} onChange={(event) => setEditRegNumber(event.target.value)} placeholder="R number" className="w-full px-3 py-2 rounded bg-slate-900 text-slate-100 border border-slate-600" />
+                    <p className="text-xs text-slate-400">Their password will be reset to the new R number, and they will be asked to choose a new password.</p>
+                </div>
+            </Modal>
 
             {/* Reset password modal */}
             <Modal
